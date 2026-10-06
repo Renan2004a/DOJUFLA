@@ -1,0 +1,4 @@
+# Dependências específicas do Render (Linux).
+# Inclui o requirements principal + gunicorn (servidor de produção).
+-r requirements.txt
+gunicorn==22.0.0
