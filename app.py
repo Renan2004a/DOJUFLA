@@ -13,7 +13,7 @@ from blueprints.auth import auth_bp
 from blueprints.chat import chat_bp
 from config import Config
 from database import init_db
-from extensions import login_manager
+from extensions import csrf, login_manager
 from models import get_user
 
 
@@ -47,6 +47,7 @@ def create_app(config_object=Config) -> Flask:
 
     login_manager.init_app(app)
     login_manager.user_loader(get_user)
+    csrf.init_app(app)
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(chat_bp)

@@ -12,6 +12,11 @@
         </button>
 
         <h2 class="sidebar-title" id="historico-titulo">Histórico</h2>
+
+        <label for="buscaHistorico" class="visually-hidden">Buscar conversa</label>
+        <input type="search" id="buscaHistorico" class="sidebar-search"
+               placeholder="Buscar…" oninput="filtrarConversas(this.value)">
+
         <nav class="chat-list" id="chatList" aria-labelledby="historico-titulo"></nav>
     </aside>
 
@@ -21,16 +26,26 @@
             <div class="llm-selector">
                 <label for="llmSelect">Modelo de IA</label>
                 <select id="llmSelect" onchange="alterarLLM()">
-                    <option value="ollama" {% if current_user.llm_preference == 'ollama' %}selected{% endif %}>Ollama (Llama 3 · local)</option>
-                    <option value="groq" {% if current_user.llm_preference == 'groq' %}selected{% endif %}>Groq (Llama 3.3 70B · nuvem)</option>
+                    {% for llm in llms %}
+                        <option value="{{ llm.name }}"
+                                {% if current_user.llm_preference == llm.name %}selected{% endif %}>
+                            {{ llm.label }}
+                        </option>
+                    {% else %}
+                        <option value="ollama" selected>Ollama (Llama 3 · local)</option>
+                    {% endfor %}
                 </select>
                 <span id="llmStatus" class="llm-status" role="status" aria-live="polite"></span>
             </div>
 
-            <button type="button" class="btn-sidebar-toggle" id="sidebarToggle"
-                    onclick="alternarSidebar()" aria-controls="sidebar" aria-expanded="false">
-                Histórico
-            </button>
+            <div class="chat-toolbar-actions">
+                <button type="button" class="btn-ghost" id="btnExportar" onclick="exportarConversa()"
+                        disabled title="Exportar conversa em Markdown">Exportar</button>
+                <button type="button" class="btn-sidebar-toggle" id="sidebarToggle"
+                        onclick="alternarSidebar()" aria-controls="sidebar" aria-expanded="false">
+                    Histórico
+                </button>
+            </div>
         </div>
 
         <div class="chat-box" id="chatBox" role="log" aria-live="off" aria-label="Mensagens da conversa" tabindex="0">
@@ -55,8 +70,6 @@
 </div>
 
 <script>
-console.log("[DOJUFLA] index.html carregado");
-
 let conversaAtivaId = null;
 let enviando = false;
 
@@ -72,7 +85,6 @@ function carregarConversas() {
         .then(conversas => {
             const lista = document.getElementById('chatList');
             lista.innerHTML = '';
-
             if (!conversas.length) {
                 const vazio = document.createElement('p');
                 vazio.className = 'chat-empty';
@@ -80,16 +92,14 @@ function carregarConversas() {
                 lista.appendChild(vazio);
                 return;
             }
-
-            const grupos = agruparPorData(conversas);
-            grupos.forEach((itens, rotulo) => {
+            agruparPorData(conversas).forEach((itens, rotulo) => {
                 const titulo = document.createElement('div');
                 titulo.className = 'chat-group-label';
                 titulo.textContent = rotulo;
                 lista.appendChild(titulo);
-
                 itens.forEach(conv => lista.appendChild(criarItemConversa(conv)));
             });
+            filtrarConversas(document.getElementById('buscaHistorico').value);
         })
         .catch(err => console.error("[DOJUFLA] erro em /conversas:", err));
 }
@@ -104,13 +114,11 @@ function agruparPorData(conversas) {
         ['Últimos 30 dias', d => d >= new Date(inicioHoje.getFullYear(), inicioHoje.getMonth(), inicioHoje.getDate() - 30)],
         ['Mais antigas', () => true],
     ];
-
     const ordenadas = [...conversas].sort((a, b) => {
         const da = new Date((a.updated_at || a.created_at || '').replace(' ', 'T'));
         const db = new Date((b.updated_at || b.created_at || '').replace(' ', 'T'));
         return db - da;
     });
-
     const grupos = new Map();
     ordenadas.forEach(conv => {
         const data = new Date((conv.updated_at || conv.created_at || '').replace(' ', 'T'));
@@ -124,6 +132,7 @@ function agruparPorData(conversas) {
 function criarItemConversa(conv) {
     const item = document.createElement('div');
     item.className = 'chat-item' + (conv.id === conversaAtivaId ? ' active' : '');
+    item.dataset.titulo = (conv.titulo || '').toLowerCase();
 
     const titulo = document.createElement('button');
     titulo.type = 'button';
@@ -133,20 +142,34 @@ function criarItemConversa(conv) {
     if (conv.id === conversaAtivaId) titulo.setAttribute('aria-current', 'true');
     titulo.onclick = () => selecionarConversa(conv.id);
 
+    const btnRen = document.createElement('button');
+    btnRen.type = 'button';
+    btnRen.className = 'btn-chat-action';
+    btnRen.setAttribute('aria-label', 'Renomear conversa: ' + conv.titulo);
+    btnRen.title = 'Renomear';
+    btnRen.textContent = '✎';
+    btnRen.onclick = (e) => { e.stopPropagation(); renomearConversa(conv.id, conv.titulo); };
+
     const btnDel = document.createElement('button');
     btnDel.type = 'button';
-    btnDel.className = 'btn-delete-chat';
+    btnDel.className = 'btn-chat-action btn-del';
     btnDel.setAttribute('aria-label', 'Apagar conversa: ' + conv.titulo);
-    btnDel.title = 'Apagar conversa';
+    btnDel.title = 'Apagar';
     btnDel.textContent = '×';
-    btnDel.onclick = (e) => {
-        e.stopPropagation();
-        deletarConversa(conv.id);
-    };
+    btnDel.onclick = (e) => { e.stopPropagation(); deletarConversa(conv.id); };
 
     item.appendChild(titulo);
+    item.appendChild(btnRen);
     item.appendChild(btnDel);
     return item;
+}
+
+function filtrarConversas(termo) {
+    const alvo = (termo || '').trim().toLowerCase();
+    document.querySelectorAll('#chatList .chat-item').forEach(item => {
+        const visivel = !alvo || item.dataset.titulo.includes(alvo);
+        item.style.display = visivel ? '' : 'none';
+    });
 }
 
 function selecionarConversa(id) {
@@ -159,18 +182,16 @@ function selecionarConversa(id) {
         .then(data => {
             const chatBox = document.getElementById('chatBox');
             chatBox.innerHTML = '';
-
             if (!data.mensagens || data.mensagens.length === 0) {
                 chatBox.appendChild(mensagem('Conversa iniciada. Digite sua pergunta abaixo.', 'ia', 'Assistente DOJUFLA'));
-                return;
+            } else {
+                data.mensagens.forEach(msg => {
+                    chatBox.appendChild(mensagem(msg.pergunta, 'user', 'Você'));
+                    chatBox.appendChild(mensagem(msg.resposta, 'ia', 'Assistente DOJUFLA', msg.fontes));
+                });
             }
-
-            data.mensagens.forEach(msg => {
-                chatBox.appendChild(mensagem(msg.pergunta, 'user', 'Você'));
-                chatBox.appendChild(mensagem(msg.resposta, 'ia', 'Assistente DOJUFLA'));
-            });
-
             chatBox.scrollTop = chatBox.scrollHeight;
+            atualizarExportar();
         })
         .catch(err => console.error("[DOJUFLA] erro em /conversa/" + id, err));
 }
@@ -182,22 +203,43 @@ function criarNovaConversa() {
     chatBox.appendChild(mensagem('Nova conversa iniciada. Como posso ajudar?', 'ia', 'Assistente DOJUFLA'));
     carregarConversas();
     fecharSidebarMobile();
+    atualizarExportar();
     document.getElementById('questionInput').focus();
 }
 
 function deletarConversa(id) {
     if (!confirm("Deseja realmente apagar esta conversa?")) return;
-
-    fetch(`/conversa/${id}/deletar`, { method: 'DELETE' })
+    api(`/conversa/${id}/deletar`, { method: 'DELETE' })
         .then(res => res.json())
         .then(() => {
-            if (conversaAtivaId === id) {
-                criarNovaConversa();
-            } else {
-                carregarConversas();
-            }
+            if (conversaAtivaId === id) criarNovaConversa();
+            else carregarConversas();
         })
         .catch(err => console.error("[DOJUFLA] erro ao deletar", err));
+}
+
+function renomearConversa(id, atual) {
+    const novo = prompt("Novo nome da conversa:", atual || "");
+    if (novo === null) return;
+    const titulo = novo.trim();
+    if (!titulo) return;
+    api(`/conversa/${id}/renomear`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ titulo })
+    })
+        .then(res => res.json())
+        .then(() => carregarConversas())
+        .catch(err => console.error("[DOJUFLA] erro ao renomear", err));
+}
+
+function exportarConversa() {
+    if (!conversaAtivaId) return;
+    window.location = `/conversa/${conversaAtivaId}/exportar`;
+}
+
+function atualizarExportar() {
+    document.getElementById('btnExportar').disabled = !conversaAtivaId;
 }
 
 /* ---------- Envio ---------- */
@@ -211,7 +253,6 @@ function checarEnter(event) {
 
 async function enviarPergunta() {
     if (enviando) return;
-
     const input = document.getElementById('questionInput');
     const pergunta = input.value.trim();
     if (!pergunta) return;
@@ -236,7 +277,7 @@ async function enviarPergunta() {
     btnEnviar.disabled = true;
 
     try {
-        const response = await fetch('/ask', {
+        const response = await api('/ask', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ question: pergunta, conversa_id: conversaAtivaId })
@@ -251,10 +292,10 @@ async function enviarPergunta() {
         }
 
         const headerConvId = response.headers.get('X-Conversa-ID');
-        if (headerConvId) conversaAtivaId = parseInt(headerConvId);
+        if (headerConvId) { conversaAtivaId = parseInt(headerConvId); atualizarExportar(); }
+        const fontes = lerFontes(response.headers.get('X-Sources'));
 
         chatBox.removeChild(typing);
-
         const wrapper = mensagem('', 'ia', 'Assistente DOJUFLA');
         chatBox.appendChild(wrapper);
         const corpo = wrapper.querySelector('.msg-body');
@@ -262,23 +303,18 @@ async function enviarPergunta() {
         const reader = response.body.getReader();
         const decoder = new TextDecoder("utf-8");
         let respostaCompleta = "";
-
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            const texto = decoder.decode(value, { stream: true });
-            respostaCompleta += texto;
+            respostaCompleta += decoder.decode(value, { stream: true });
             corpo.textContent = respostaCompleta;
             chatBox.scrollTop = chatBox.scrollHeight;
         }
+        if (!respostaCompleta) corpo.textContent = '[A IA não retornou resposta]';
 
-        if (!respostaCompleta) {
-            corpo.textContent = '[A IA não retornou resposta]';
-        }
-
+        renderFontes(wrapper, fontes);
         srStatus.textContent = 'Assistente respondeu: ' + corpo.textContent;
         carregarConversas();
-
     } catch (err) {
         console.error("[DOJUFLA] ERRO no fetch:", err);
         const typingAtual = document.getElementById('typingIndicator');
@@ -294,7 +330,7 @@ async function enviarPergunta() {
 
 /* ---------- Utilidades ---------- */
 
-function mensagem(texto, tipo, rotulo) {
+function mensagem(texto, tipo, rotulo, fontes) {
     const wrapper = document.createElement('div');
     wrapper.className = 'msg ' + tipo;
 
@@ -308,28 +344,45 @@ function mensagem(texto, tipo, rotulo) {
 
     wrapper.appendChild(label);
     wrapper.appendChild(body);
+    if (fontes && fontes.length) renderFontes(wrapper, fontes);
     return wrapper;
+}
+
+function renderFontes(wrapper, fontes) {
+    if (!fontes || !fontes.length) return;
+    const box = document.createElement('div');
+    box.className = 'msg-sources';
+    const titulo = document.createElement('span');
+    titulo.className = 'msg-sources-title';
+    titulo.textContent = 'Fontes:';
+    box.appendChild(titulo);
+    fontes.forEach(f => {
+        const tag = document.createElement('span');
+        tag.className = 'msg-source';
+        tag.textContent = f.pagina ? `${f.arquivo} (p. ${f.pagina})` : f.arquivo;
+        box.appendChild(tag);
+    });
+    wrapper.appendChild(box);
+}
+
+function lerFontes(header) {
+    if (!header) return [];
+    try { return JSON.parse(header); } catch (err) { return []; }
 }
 
 function alterarLLM() {
     const llm = document.getElementById('llmSelect').value;
     const status = document.getElementById('llmStatus');
     status.textContent = 'Salvando…';
-
-    fetch('/set_llm', {
+    api('/set_llm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ llm: llm })
+        body: JSON.stringify({ llm })
     })
-    .then(res => res.json())
-    .then(data => {
-        status.textContent = data.ok ? 'Modelo salvo.' : 'Não foi possível salvar.';
-        setTimeout(() => status.textContent = '', 2500);
-    })
-    .catch(() => {
-        status.textContent = 'Não foi possível salvar.';
-        setTimeout(() => status.textContent = '', 2500);
-    });
+    .then(res => res.json().then(data => ({ ok: res.ok, data })))
+    .then(({ ok }) => { status.textContent = ok ? 'Modelo salvo.' : 'Não foi possível salvar.'; })
+    .catch(() => { status.textContent = 'Não foi possível salvar.'; })
+    .finally(() => setTimeout(() => status.textContent = '', 2500));
 }
 
 /* ---------- Sidebar responsiva ---------- */

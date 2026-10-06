@@ -31,6 +31,7 @@
             {% if sucesso %}<p class="msg-sucesso" role="status">{{ sucesso }}</p>{% endif %}
 
             <form method="POST" class="auth-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="acao" value="login">
                 <div class="input-group">
                     <label for="login-username">Usuário</label>
@@ -50,6 +51,7 @@
             {% if erro_cad %}<p class="msg-erro" role="alert">{{ erro_cad }}</p>{% endif %}
 
             <form method="POST" class="auth-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="acao" value="register">
                 <div class="input-group">
                     <label for="cad-username">Usuário</label>
@@ -58,10 +60,10 @@
                 <div class="input-group">
                     <label for="cad-password">Senha</label>
                     <input id="cad-password" type="password" name="password"
-                           autocomplete="new-password" minlength="4"
+                           autocomplete="new-password" minlength="{{ config.PASSWORD_MIN_LENGTH }}"
                            aria-describedby="cad-help" required>
                     <p id="cad-help" class="field-help">
-                        Mínimo de 4 caracteres. Novas contas entram como usuário comum.
+                        Mínimo de {{ config.PASSWORD_MIN_LENGTH }} caracteres. Novas contas entram como usuário comum.
                     </p>
                 </div>
                 <button type="submit" class="btn-primary">Criar conta</button>

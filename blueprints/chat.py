@@ -1,13 +1,21 @@
 """Chat com streaming, histórico de conversas e preferência de LLM."""
+import json
 import logging
 
-from flask import Blueprint, Response, jsonify, render_template, request, stream_with_context
+from flask import (
+    Blueprint,
+    Response,
+    jsonify,
+    render_template,
+    request,
+    stream_with_context,
+)
 from flask_login import current_user, login_required
 
 from config import Config
 from database import db
-from rag.llm import gerar_resposta
-from rag.vectorstore import get_vectorstore, retrieve
+from rag.llm import available_providers, gerar_resposta
+from rag.vectorstore import get_vectorstore, retrieve_with_sources
 
 chat_bp = Blueprint("chat", __name__)
 logger = logging.getLogger(__name__)
@@ -19,7 +27,7 @@ logger = logging.getLogger(__name__)
 @chat_bp.route("/")
 @login_required
 def home():
-    return render_template("index.html")
+    return render_template("index.html", llms=available_providers())
 
 
 @chat_bp.route("/institucional")
@@ -34,9 +42,9 @@ def sobre():
 @login_required
 def set_llm():
     data = request.get_json(silent=True) or {}
-    llm = data.get("llm", Config.DEFAULT_LLM)
-    if llm not in Config.AVAILABLE_LLMS:
-        return jsonify({"erro": "Modelo inválido"}), 400
+    llm = data.get("llm", "")
+    if llm not in {provider["name"] for provider in available_providers()}:
+        return jsonify({"erro": "Modelo indisponível"}), 400
 
     with db() as conn:
         conn.execute(
@@ -68,12 +76,20 @@ def obter_conversa(conversa_id):
         if not _usuario_dono(conn, conversa_id):
             return jsonify({"erro": "Conversa não encontrada"}), 404
         rows = conn.execute(
-            "SELECT pergunta, resposta FROM historico WHERE conversa_id=? ORDER BY id ASC",
+            "SELECT pergunta, resposta, fontes FROM historico "
+            "WHERE conversa_id=? ORDER BY id ASC",
             (conversa_id,),
         ).fetchall()
     return jsonify({
         "conversa_id": conversa_id,
-        "mensagens": [{"pergunta": r["pergunta"], "resposta": r["resposta"]} for r in rows],
+        "mensagens": [
+            {
+                "pergunta": row["pergunta"],
+                "resposta": row["resposta"],
+                "fontes": _parse_fontes(row["fontes"]),
+            }
+            for row in rows
+        ],
     })
 
 
@@ -87,6 +103,24 @@ def nova_conversa():
         )
         conversa_id = cursor.lastrowid
     return jsonify({"conversa_id": conversa_id, "titulo": "Nova Conversa"})
+
+
+@chat_bp.post("/conversa/<int:conversa_id>/renomear")
+@login_required
+def renomear_conversa(conversa_id):
+    titulo = (request.get_json(silent=True) or {}).get("titulo", "").strip()
+    if not titulo:
+        return jsonify({"erro": "Título vazio"}), 400
+
+    titulo = titulo[:80]
+    with db() as conn:
+        cursor = conn.execute(
+            "UPDATE conversas SET titulo=? WHERE id=? AND user_id=?",
+            (titulo, conversa_id, current_user.id),
+        )
+        if cursor.rowcount == 0:
+            return jsonify({"erro": "Conversa não encontrada"}), 404
+    return jsonify({"ok": True, "titulo": titulo})
 
 
 @chat_bp.route("/conversa/<int:conversa_id>/deletar", methods=["DELETE", "POST"])
@@ -104,6 +138,37 @@ def deletar_conversa(conversa_id):
     return jsonify({"ok": True})
 
 
+@chat_bp.get("/conversa/<int:conversa_id>/exportar")
+@login_required
+def exportar_conversa(conversa_id):
+    with db() as conn:
+        conversa = conn.execute(
+            "SELECT titulo FROM conversas WHERE id=? AND user_id=?",
+            (conversa_id, current_user.id),
+        ).fetchone()
+        if not conversa:
+            return jsonify({"erro": "Conversa não encontrada"}), 404
+        rows = conn.execute(
+            "SELECT pergunta, resposta, fontes FROM historico "
+            "WHERE conversa_id=? ORDER BY id ASC",
+            (conversa_id,),
+        ).fetchall()
+
+    linhas = [f"# {conversa['titulo']}", ""]
+    for row in rows:
+        linhas.append(f"## Você\n\n{row['pergunta']}\n")
+        linhas.append(f"## Assistente\n\n{row['resposta']}\n")
+        fontes = _parse_fontes(row["fontes"])
+        if fontes:
+            linhas.append("Fontes: " + "; ".join(_rotulo_fonte(f) for f in fontes) + "\n")
+
+    return Response(
+        "\n".join(linhas),
+        mimetype="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="conversa-{conversa_id}.md"'},
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Pergunta (resposta em streaming)
 # --------------------------------------------------------------------------- #
@@ -118,7 +183,11 @@ def ask():
     user_id = current_user.id
     conversa_id = _resolver_conversa(user_id, data.get("conversa_id"), pergunta)
     historico = _carregar_historico(conversa_id)
-    contexto = "\n\n".join(retrieve(pergunta, get_vectorstore()))
+
+    trechos = retrieve_with_sources(pergunta, get_vectorstore())
+    contexto = "\n\n".join(item["texto"] for item in trechos)
+    fontes = _fontes_unicas(trechos)
+    fontes_json = json.dumps(fontes, ensure_ascii=False)
     llm = current_user.llm_preference
 
     def gerar():
@@ -135,10 +204,12 @@ def ask():
             resposta += mensagem
             yield mensagem
         finally:
-            _salvar_mensagem(user_id, conversa_id, pergunta, resposta)
+            _salvar_mensagem(user_id, conversa_id, pergunta, resposta, fontes_json)
 
     response = Response(stream_with_context(gerar()), content_type="text/plain")
     response.headers["X-Conversa-ID"] = str(conversa_id)
+    # Cabeçalhos precisam ser ASCII; o front desserializa com JSON.parse.
+    response.headers["X-Sources"] = json.dumps(fontes, ensure_ascii=True)
     return response
 
 
@@ -189,13 +260,14 @@ def _carregar_historico(conversa_id: int) -> list:
     return historico
 
 
-def _salvar_mensagem(user_id: int, conversa_id: int, pergunta: str, resposta: str) -> None:
+def _salvar_mensagem(user_id: int, conversa_id: int, pergunta: str, resposta: str,
+                     fontes_json: str) -> None:
     try:
         with db() as conn:
             conn.execute(
-                "INSERT INTO historico (conversa_id, user_id, pergunta, resposta) "
-                "VALUES (?, ?, ?, ?)",
-                (conversa_id, user_id, pergunta, resposta),
+                "INSERT INTO historico (conversa_id, user_id, pergunta, resposta, fontes) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (conversa_id, user_id, pergunta, resposta, fontes_json),
             )
             conn.execute(
                 "UPDATE conversas SET updated_at=CURRENT_TIMESTAMP WHERE id=?",
@@ -203,3 +275,29 @@ def _salvar_mensagem(user_id: int, conversa_id: int, pergunta: str, resposta: st
             )
     except Exception:  # pragma: no cover - não deve quebrar a resposta
         logger.exception("Falha ao salvar a mensagem no histórico")
+
+
+def _fontes_unicas(trechos: list) -> list:
+    vistos = set()
+    fontes = []
+    for item in trechos:
+        chave = (item["arquivo"], item["pagina"])
+        if chave not in vistos:
+            vistos.add(chave)
+            fontes.append({"arquivo": item["arquivo"], "pagina": item["pagina"]})
+    return fontes
+
+
+def _parse_fontes(raw) -> list:
+    if not raw:
+        return []
+    try:
+        return json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return []
+
+
+def _rotulo_fonte(fonte: dict) -> str:
+    arquivo = fonte.get("arquivo", "?")
+    pagina = fonte.get("pagina")
+    return f"{arquivo} (p. {pagina})" if pagina else arquivo

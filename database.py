@@ -47,7 +47,7 @@ _MIGRATIONS = {
     "usuarios": {"role": "TEXT DEFAULT 'usuario'",
                  "llm_preference": "TEXT DEFAULT 'ollama'"},
     "conversas": {"updated_at": "TIMESTAMP"},
-    "historico": {"conversa_id": "INTEGER", "timestamp": "TIMESTAMP"},
+    "historico": {"conversa_id": "INTEGER", "timestamp": "TIMESTAMP", "fontes": "TEXT"},
 }
 
 

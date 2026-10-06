@@ -2,13 +2,14 @@
 import logging
 import os
 
-from flask import Blueprint, redirect, render_template, request, url_for
+from flask import Blueprint, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from config import Config
 from database import db
 from models import ROLE_LEVELS
-from rag.vectorstore import rebuild_vectorstore, stats
+from rag import indexer
+from rag.vectorstore import stats
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 logger = logging.getLogger(__name__)
@@ -25,41 +26,60 @@ def upload():
 
     mensagem = request.args.get("msg")
     if request.method == "POST":
-        mensagem = _receber_pdf()
+        mensagem = _receber_arquivos()
 
-    return render_template("upload.html", mensagem=mensagem, stats=stats())
+    return render_template("upload.html", mensagem=mensagem, stats=stats(),
+                           progresso=indexer.status())
 
 
-@admin_bp.route("/retrain")
+@admin_bp.route("/retrain", methods=["GET", "POST"])
 @login_required
 def retrain():
     if not current_user.is_moderator_or_above():
         return "⛔ Acesso negado", 403
 
-    try:
-        vectorstore = rebuild_vectorstore()
-        msg = f"✅ IA reindexada: {vectorstore.index.ntotal} vetores."
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("Falha ao reindexar")
-        msg = f"⚠️ Falha ao reindexar: {exc}"
+    if indexer.start():
+        msg = "🔄 Reindexação iniciada. Acompanhe o progresso abaixo."
+    else:
+        msg = "⏳ Já existe uma reindexação em andamento."
     return redirect(url_for("admin.upload", msg=msg))
 
 
-def _receber_pdf() -> str:
-    arquivo = request.files.get("file")
-    if not arquivo or not arquivo.filename.lower().endswith(".pdf"):
-        return "⚠️ Envie apenas arquivos .pdf"
+@admin_bp.get("/reindex_status")
+@login_required
+def reindex_status():
+    if not current_user.is_moderator_or_above():
+        return jsonify({"erro": "Acesso negado"}), 403
+    return jsonify(indexer.status())
 
-    filename = os.path.basename(arquivo.filename)
+
+def _receber_arquivos() -> str:
+    arquivos = [f for f in request.files.getlist("file") if f and f.filename]
+    if not arquivos:
+        return "⚠️ Nenhum arquivo enviado."
+
+    salvos, ignorados = [], []
     os.makedirs(Config.DOCS_DIR, exist_ok=True)
-    arquivo.save(os.path.join(Config.DOCS_DIR, filename))
+    for arquivo in arquivos:
+        ext = os.path.splitext(arquivo.filename)[1].lower()
+        if ext not in Config.ALLOWED_EXTENSIONS:
+            ignorados.append(arquivo.filename)
+            continue
+        filename = os.path.basename(arquivo.filename)
+        arquivo.save(os.path.join(Config.DOCS_DIR, filename))
+        salvos.append(filename)
 
-    try:
-        vectorstore = rebuild_vectorstore()
-        return f"✅ PDF '{filename}' indexado. Base com {vectorstore.index.ntotal} vetores."
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("Falha ao reindexar")
-        return f"⚠️ PDF salvo, mas falha ao reindexar: {exc}"
+    if not salvos:
+        return f"⚠️ Formatos não aceitos: {', '.join(ignorados)}."
+
+    iniciada = indexer.start()
+    partes = [f"✅ {len(salvos)} arquivo(s) enviado(s)."]
+    if ignorados:
+        partes.append(f"Ignorados (formato): {', '.join(ignorados)}.")
+    partes.append(
+        "🔄 Reindexação iniciada." if iniciada else "⏳ Reindexação já em andamento."
+    )
+    return " ".join(partes)
 
 
 # --------------------------------------------------------------------------- #

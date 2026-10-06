@@ -10,8 +10,8 @@
         <div class="upload-header">
             <h2>Treinamento da IA</h2>
             <p>
-                Envie documentos PDF para ampliar a base de conhecimento do DOJUFLA.
-                O texto é extraído, vetorizado e o índice de busca é reconstruído automaticamente.
+                Envie documentos (PDF, TXT, MD ou DOCX) para ampliar a base de conhecimento.
+                O texto é extraído, dividido em blocos e o índice de busca é reconstruído em segundo plano.
             </p>
         </div>
 
@@ -34,20 +34,34 @@
                     <span class="stat-label">Vetores no índice</span>
                 </div>
                 <div class="stat">
-                    <span class="stat-value">{{ stats.pdfs }}</span>
-                    <span class="stat-label">PDFs na base</span>
+                    <span class="stat-value">{{ stats.arquivos }}</span>
+                    <span class="stat-label">Arquivos na base</span>
                 </div>
                 <div class="stat">
                     <span class="stat-value stat-model">{{ stats.modelo }}</span>
                     <span class="stat-label">Modelo de embeddings</span>
                 </div>
             </div>
-            <p class="kb-note">
-                Se os números aumentarem após o envio, o novo conteúdo foi incorporado à busca.
-            </p>
+        </section>
+
+        <section class="index-status" id="indexStatus" data-state="{{ progresso.state }}"
+                 aria-live="polite">
+            <div class="index-status-head">
+                <strong id="indexStage">
+                    {% if progresso.state == 'running' %}{{ progresso.stage }}
+                    {% elif progresso.state == 'done' %}Concluído
+                    {% elif progresso.state == 'error' %}Erro
+                    {% else %}Ocioso{% endif %}
+                </strong>
+                <span id="indexMessage" class="index-message">
+                    {% if progresso.state == 'running' %}Reindexando…{% else %}{{ progresso.message }}{% endif %}
+                </span>
+            </div>
+            <div class="progress"><div class="progress-bar" id="indexBar" style="width:0%"></div></div>
         </section>
 
         <form method="POST" enctype="multipart/form-data" class="upload-form" id="uploadForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
             <label for="fileInput" class="drop-zone" id="dropZone"
                    aria-describedby="fileHint dropHelp">
@@ -57,29 +71,31 @@
                     <polyline points="17 8 12 3 7 8"/>
                     <line x1="12" y1="3" x2="12" y2="15"/>
                 </svg>
-                <span class="drop-title">Arraste um PDF aqui ou clique para selecionar</span>
+                <span class="drop-title">Arraste os arquivos aqui ou clique para selecionar</span>
                 <span class="drop-hint" id="fileHint">Nenhum arquivo selecionado</span>
-                <input type="file" name="file" id="fileInput" accept=".pdf,application/pdf" required
-                       class="visually-hidden">
+                <input type="file" name="file" id="fileInput" multiple
+                       accept=".pdf,.txt,.md,.docx" class="visually-hidden">
             </label>
-            <p id="dropHelp" class="field-help">Somente arquivos no formato PDF são aceitos.</p>
+            <p id="dropHelp" class="field-help">Formatos aceitos: PDF, TXT, MD e DOCX.</p>
 
             <button type="submit" class="btn-primary" id="btnSubmit" disabled>
                 Enviar e treinar IA
             </button>
-
         </form>
 
         <div class="upload-actions">
-            <a href="{{ url_for('admin.retrain') }}" class="btn-secondary">
-                Reindexar com os documentos existentes
-            </a>
+            <button type="button" class="btn-secondary" onclick="reindexar()">
+                Reindexar com os arquivos existentes
+            </button>
         </div>
+        <form id="retrainForm" method="POST" action="{{ url_for('admin.retrain') }}" hidden>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        </form>
 
         <section class="upload-info">
             <h3>Como funciona</h3>
             <ol>
-                <li>O PDF é salvo na pasta <code>documentos/</code>.</li>
+                <li>Os arquivos são salvos na pasta <code>documentos/</code>.</li>
                 <li>O texto é extraído e dividido em blocos.</li>
                 <li>Cada bloco vira um vetor no índice FAISS.</li>
                 <li>A IA passa a responder com base no novo conteúdo.</li>
@@ -95,9 +111,18 @@ const fileHint  = document.getElementById('fileHint');
 const btnSubmit = document.getElementById('btnSubmit');
 const dropZone  = document.getElementById('dropZone');
 
-fileInput.addEventListener('change', () => {
-    if (fileInput.files.length > 0) {
-        fileHint.textContent = fileInput.files[0].name;
+fileInput.addEventListener('change', atualizarHint);
+['dragenter', 'dragover'].forEach(evt =>
+    dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.add('dragging'); }));
+['dragleave', 'drop'].forEach(evt =>
+    dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.remove('dragging'); }));
+dropZone.addEventListener('drop', e => {
+    if (e.dataTransfer.files.length) { fileInput.files = e.dataTransfer.files; atualizarHint(); }
+});
+
+function atualizarHint() {
+    if (fileInput.files.length) {
+        fileHint.textContent = `${fileInput.files.length} arquivo(s) selecionado(s)`;
         fileHint.classList.add('has-file');
         btnSubmit.disabled = false;
     } else {
@@ -105,36 +130,45 @@ fileInput.addEventListener('change', () => {
         fileHint.classList.remove('has-file');
         btnSubmit.disabled = true;
     }
-});
+}
 
-// Suporte a drag & drop visual
-['dragenter', 'dragover'].forEach(evt =>
-    dropZone.addEventListener(evt, e => {
-        e.preventDefault();
-        dropZone.classList.add('dragging');
-    })
-);
-
-['dragleave', 'drop'].forEach(evt =>
-    dropZone.addEventListener(evt, e => {
-        e.preventDefault();
-        dropZone.classList.remove('dragging');
-    })
-);
-
-dropZone.addEventListener('drop', e => {
-    const files = e.dataTransfer.files;
-    if (files.length > 0 && files[0].name.toLowerCase().endsWith('.pdf')) {
-        fileInput.files = files;
-        fileInput.dispatchEvent(new Event('change'));
-    }
-});
-
-// Feedback visual ao enviar
 document.getElementById('uploadForm').addEventListener('submit', () => {
     btnSubmit.disabled = true;
-    btnSubmit.textContent = 'Processando…';
+    btnSubmit.textContent = 'Enviando…';
 });
+
+function reindexar() {
+    document.getElementById('retrainForm').submit();
+}
+
+/* Progresso da reindexação */
+const statusEl = document.getElementById('indexStatus');
+const barEl = document.getElementById('indexBar');
+const stageEl = document.getElementById('indexStage');
+const msgEl = document.getElementById('indexMessage');
+let pollTimer = null;
+
+function renderStatus(s) {
+    statusEl.dataset.state = s.state;
+    stageEl.textContent = s.stage || 'Ocioso';
+    msgEl.textContent = s.message || '';
+    const pct = s.total ? Math.round((s.done / s.total) * 100) : 0;
+    barEl.style.width = pct + '%';
+    if (s.state === 'running') {
+        if (!pollTimer) pollTimer = setInterval(poll, 1500);
+    } else {
+        clearInterval(pollTimer); pollTimer = null;
+    }
+}
+
+function poll() {
+    fetch('{{ url_for("admin.reindex_status") }}')
+        .then(res => res.json())
+        .then(renderStatus)
+        .catch(() => {});
+}
+
+if (statusEl.dataset.state === 'running') { poll(); }
 </script>
 
 {% endblock %}

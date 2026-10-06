@@ -15,6 +15,7 @@
         {% if erro %}<p class="msg-erro" role="alert">{{ erro }}</p>{% endif %}
 
         <form method="POST" action="{{ url_for('auth.login') }}" class="auth-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="acao" value="register">
             <div class="input-group">
                 <label for="reg-username">Usuário</label>

@@ -57,6 +57,7 @@
                         </td>
                         <td>
                             <form method="POST" action="{{ url_for('admin.alterar_role', user_id=u.id) }}" class="role-form">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <label class="visually-hidden" for="role-{{ u.id }}">
                                     Novo cargo para {{ u.username }}
                                 </label>

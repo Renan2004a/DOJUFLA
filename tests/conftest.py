@@ -16,6 +16,10 @@ from database import db  # noqa: E402
 class _BaseConfig(Config):
     TESTING = True
     SECRET_KEY = "test-secret"
+    WTF_CSRF_ENABLED = False
+    GROQ_API_KEY = "test-key"
+    GEMINI_API_KEY = ""
+    DEFAULT_LLM = "ollama"
 
 
 @pytest.fixture()

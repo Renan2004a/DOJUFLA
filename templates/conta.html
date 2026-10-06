@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Minha Conta — DOJUFLA{% endblock %}
+
+{% block content %}
+
+<div class="page-wrapper">
+    <div class="admin-card">
+        <h2>Minha Conta</h2>
+        <p class="page-intro">
+            Usuário: <strong>{{ current_user.username }}</strong> ·
+            Cargo: <span class="role-badge role-{{ current_user.role }}">{{ current_user.role }}</span>
+        </p>
+
+        {% if erro %}<p class="msg-erro" role="alert">{{ erro }}</p>{% endif %}
+        {% if ok %}<p class="msg-sucesso" role="status">{{ ok }}</p>{% endif %}
+
+        <h3 class="section-title">Alterar senha</h3>
+        <form method="POST" action="{{ url_for('auth.alterar_senha') }}" class="auth-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="input-group">
+                <label for="senha-atual">Senha atual</label>
+                <input id="senha-atual" type="password" name="atual"
+                       autocomplete="current-password" required>
+            </div>
+            <div class="input-group">
+                <label for="senha-nova">Nova senha</label>
+                <input id="senha-nova" type="password" name="nova"
+                       autocomplete="new-password" minlength="{{ config.PASSWORD_MIN_LENGTH }}"
+                       aria-describedby="senha-help" required>
+                <p id="senha-help" class="field-help">
+                    Mínimo de {{ config.PASSWORD_MIN_LENGTH }} caracteres.
+                </p>
+            </div>
+            <button type="submit" class="btn-primary">Salvar nova senha</button>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

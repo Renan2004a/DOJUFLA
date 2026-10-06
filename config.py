@@ -28,22 +28,38 @@ class Config:
 
     # ----- Flask -----
     SECRET_KEY = os.environ.get("DOJUFLA_SECRET_KEY", "dev-secret-troque-isto")
+    MAX_CONTENT_LENGTH = int(os.environ.get("MAX_UPLOAD_MB", "40")) * 1024 * 1024
 
     # ----- Pré-processamento / busca -----
     EMBED_MODEL = os.environ.get("EMBED_MODEL", "all-MiniLM-L6-v2")
+    EMBED_BATCH_SIZE = int(os.environ.get("EMBED_BATCH_SIZE", "64"))
     CHUNK_SIZE = int(os.environ.get("CHUNK_SIZE", "800"))
     CHUNK_OVERLAP = int(os.environ.get("CHUNK_OVERLAP", "150"))
     RETRIEVE_K = int(os.environ.get("RETRIEVE_K", "4"))
     HISTORY_LIMIT = int(os.environ.get("HISTORY_LIMIT", "6"))
 
+    # Extensões aceitas no treinamento da IA.
+    ALLOWED_EXTENSIONS = (".pdf", ".txt", ".md", ".docx")
+
     # ----- LLMs -----
     OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
     OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3")
-    OLLAMA_TIMEOUT = int(os.environ.get("OLLAMA_TIMEOUT", "120"))
 
     GROQ_URL = os.environ.get("GROQ_URL", "https://api.groq.com/openai/v1/chat/completions")
     GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
     GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
+    GEMINI_URL = os.environ.get("GEMINI_URL", "https://generativelanguage.googleapis.com/v1beta")
+    GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+
+    LLM_TIMEOUT = int(os.environ.get("LLM_TIMEOUT", "120"))
+
+    # Provedor padrão para novos usuários (precisa estar configurado).
     DEFAULT_LLM = os.environ.get("DEFAULT_LLM", "ollama")
-    AVAILABLE_LLMS = ("ollama", "groq")
+
+    # ----- Segurança -----
+    PASSWORD_MIN_LENGTH = int(os.environ.get("PASSWORD_MIN_LENGTH", "6"))
+    LOGIN_MAX_ATTEMPTS = int(os.environ.get("LOGIN_MAX_ATTEMPTS", "5"))
+    LOGIN_WINDOW_SECONDS = int(os.environ.get("LOGIN_WINDOW_SECONDS", "300"))
+    WTF_CSRF_ENABLED = True
