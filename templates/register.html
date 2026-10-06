@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Criar Conta — DOJUFLA{% endblock %}
+
+{% block content %}
+
+<div class="auth-wrapper">
+    <div class="auth-card">
+        <div class="auth-head">
+            <span class="brand-badge" aria-hidden="true"><span>DOJU</span><span>FLA</span></span>
+            <h2>Criar conta</h2>
+            <p>Novas contas entram como usuário comum.</p>
+        </div>
+
+        {% if erro %}<p class="msg-erro" role="alert">{{ erro }}</p>{% endif %}
+
+        <form method="POST" action="{{ url_for('login') }}" class="auth-form">
+            <input type="hidden" name="acao" value="register">
+            <div class="input-group">
+                <label for="reg-username">Usuário</label>
+                <input id="reg-username" type="text" name="username" autocomplete="username" required>
+            </div>
+            <div class="input-group">
+                <label for="reg-password">Senha</label>
+                <input id="reg-password" type="password" name="password"
+                       autocomplete="new-password" minlength="4"
+                       aria-describedby="reg-help" required>
+                <p id="reg-help" class="field-help">Mínimo de 4 caracteres.</p>
+            </div>
+            <button type="submit" class="btn-primary">Criar conta</button>
+        </form>
+
+        <p class="auth-footer">Já tem conta? <a href="{{ url_for('login') }}">Entrar</a></p>
+    </div>
+</div>
+
+{% endblock %}

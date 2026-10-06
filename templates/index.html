@@ -1,0 +1,354 @@
+{% extends "base.html" %}
+
+{% block title %}Consulta IA — DOJUFLA{% endblock %}
+
+{% block content %}
+
+<div class="app-layout">
+
+    <aside class="sidebar" id="sidebar" aria-label="Histórico de conversas">
+        <button type="button" class="btn-new-chat" onclick="criarNovaConversa()">
+            <span aria-hidden="true">+</span> Nova conversa
+        </button>
+
+        <h2 class="sidebar-title" id="historico-titulo">Histórico</h2>
+        <nav class="chat-list" id="chatList" aria-labelledby="historico-titulo"></nav>
+    </aside>
+
+    <section class="chat-container" aria-label="Conversa com a assistente">
+
+        <div class="chat-toolbar">
+            <div class="llm-selector">
+                <label for="llmSelect">Modelo de IA</label>
+                <select id="llmSelect" onchange="alterarLLM()">
+                    <option value="ollama" {% if current_user.llm_preference == 'ollama' %}selected{% endif %}>Ollama (Llama 3 · local)</option>
+                    <option value="groq" {% if current_user.llm_preference == 'groq' %}selected{% endif %}>Groq (Llama 3.3 70B · nuvem)</option>
+                </select>
+                <span id="llmStatus" class="llm-status" role="status" aria-live="polite"></span>
+            </div>
+
+            <button type="button" class="btn-sidebar-toggle" id="sidebarToggle"
+                    onclick="alternarSidebar()" aria-controls="sidebar" aria-expanded="false">
+                Histórico
+            </button>
+        </div>
+
+        <div class="chat-box" id="chatBox" role="log" aria-live="off" aria-label="Mensagens da conversa" tabindex="0">
+            <div class="msg ia">
+                <span class="msg-label">Assistente DOJUFLA</span>
+                <div class="msg-body">Olá! Sou a assistente virtual do DOJUFLA. Como posso ajudar com artes marciais ou ciências do esporte hoje?</div>
+            </div>
+        </div>
+
+        <form class="input-area" onsubmit="event.preventDefault(); enviarPergunta();">
+            <label for="questionInput" class="visually-hidden">Digite sua pergunta</label>
+            <textarea id="questionInput" name="question" rows="2"
+                      placeholder="Digite sua pergunta… (Enter envia, Shift+Enter quebra linha)"
+                      onkeydown="checarEnter(event)"></textarea>
+            <button type="submit" id="btnEnviar">Enviar</button>
+        </form>
+        <p class="input-hint">As respostas usam a base de conhecimento do DOJUFLA. Verifique informações importantes.</p>
+
+        <div id="srStatus" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
+    </section>
+
+</div>
+
+<script>
+console.log("[DOJUFLA] index.html carregado");
+
+let conversaAtivaId = null;
+let enviando = false;
+
+document.addEventListener("DOMContentLoaded", () => {
+    carregarConversas();
+});
+
+/* ---------- Histórico ---------- */
+
+function carregarConversas() {
+    fetch('/conversas')
+        .then(res => res.json())
+        .then(conversas => {
+            const lista = document.getElementById('chatList');
+            lista.innerHTML = '';
+
+            if (!conversas.length) {
+                const vazio = document.createElement('p');
+                vazio.className = 'chat-empty';
+                vazio.textContent = 'Nenhuma conversa ainda.';
+                lista.appendChild(vazio);
+                return;
+            }
+
+            const grupos = agruparPorData(conversas);
+            grupos.forEach((itens, rotulo) => {
+                const titulo = document.createElement('div');
+                titulo.className = 'chat-group-label';
+                titulo.textContent = rotulo;
+                lista.appendChild(titulo);
+
+                itens.forEach(conv => lista.appendChild(criarItemConversa(conv)));
+            });
+        })
+        .catch(err => console.error("[DOJUFLA] erro em /conversas:", err));
+}
+
+function agruparPorData(conversas) {
+    const agora = new Date();
+    const inicioHoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+    const limites = [
+        ['Hoje', d => d >= inicioHoje],
+        ['Ontem', d => d >= new Date(inicioHoje.getFullYear(), inicioHoje.getMonth(), inicioHoje.getDate() - 1)],
+        ['Últimos 7 dias', d => d >= new Date(inicioHoje.getFullYear(), inicioHoje.getMonth(), inicioHoje.getDate() - 7)],
+        ['Últimos 30 dias', d => d >= new Date(inicioHoje.getFullYear(), inicioHoje.getMonth(), inicioHoje.getDate() - 30)],
+        ['Mais antigas', () => true],
+    ];
+
+    const ordenadas = [...conversas].sort((a, b) => {
+        const da = new Date((a.updated_at || a.created_at || '').replace(' ', 'T'));
+        const db = new Date((b.updated_at || b.created_at || '').replace(' ', 'T'));
+        return db - da;
+    });
+
+    const grupos = new Map();
+    ordenadas.forEach(conv => {
+        const data = new Date((conv.updated_at || conv.created_at || '').replace(' ', 'T'));
+        const regra = limites.find(([, teste]) => !isNaN(data) && teste(data)) || limites[limites.length - 1];
+        if (!grupos.has(regra[0])) grupos.set(regra[0], []);
+        grupos.get(regra[0]).push(conv);
+    });
+    return grupos;
+}
+
+function criarItemConversa(conv) {
+    const item = document.createElement('div');
+    item.className = 'chat-item' + (conv.id === conversaAtivaId ? ' active' : '');
+
+    const titulo = document.createElement('button');
+    titulo.type = 'button';
+    titulo.className = 'chat-item-title';
+    titulo.textContent = conv.titulo;
+    titulo.title = conv.titulo;
+    if (conv.id === conversaAtivaId) titulo.setAttribute('aria-current', 'true');
+    titulo.onclick = () => selecionarConversa(conv.id);
+
+    const btnDel = document.createElement('button');
+    btnDel.type = 'button';
+    btnDel.className = 'btn-delete-chat';
+    btnDel.setAttribute('aria-label', 'Apagar conversa: ' + conv.titulo);
+    btnDel.title = 'Apagar conversa';
+    btnDel.textContent = '×';
+    btnDel.onclick = (e) => {
+        e.stopPropagation();
+        deletarConversa(conv.id);
+    };
+
+    item.appendChild(titulo);
+    item.appendChild(btnDel);
+    return item;
+}
+
+function selecionarConversa(id) {
+    conversaAtivaId = id;
+    carregarConversas();
+    fecharSidebarMobile();
+
+    fetch(`/conversa/${id}`)
+        .then(res => res.json())
+        .then(data => {
+            const chatBox = document.getElementById('chatBox');
+            chatBox.innerHTML = '';
+
+            if (!data.mensagens || data.mensagens.length === 0) {
+                chatBox.appendChild(mensagem('Conversa iniciada. Digite sua pergunta abaixo.', 'ia', 'Assistente DOJUFLA'));
+                return;
+            }
+
+            data.mensagens.forEach(msg => {
+                chatBox.appendChild(mensagem(msg.pergunta, 'user', 'Você'));
+                chatBox.appendChild(mensagem(msg.resposta, 'ia', 'Assistente DOJUFLA'));
+            });
+
+            chatBox.scrollTop = chatBox.scrollHeight;
+        })
+        .catch(err => console.error("[DOJUFLA] erro em /conversa/" + id, err));
+}
+
+function criarNovaConversa() {
+    conversaAtivaId = null;
+    const chatBox = document.getElementById('chatBox');
+    chatBox.innerHTML = '';
+    chatBox.appendChild(mensagem('Nova conversa iniciada. Como posso ajudar?', 'ia', 'Assistente DOJUFLA'));
+    carregarConversas();
+    fecharSidebarMobile();
+    document.getElementById('questionInput').focus();
+}
+
+function deletarConversa(id) {
+    if (!confirm("Deseja realmente apagar esta conversa?")) return;
+
+    fetch(`/conversa/${id}/deletar`, { method: 'DELETE' })
+        .then(res => res.json())
+        .then(() => {
+            if (conversaAtivaId === id) {
+                criarNovaConversa();
+            } else {
+                carregarConversas();
+            }
+        })
+        .catch(err => console.error("[DOJUFLA] erro ao deletar", err));
+}
+
+/* ---------- Envio ---------- */
+
+function checarEnter(event) {
+    if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        enviarPergunta();
+    }
+}
+
+async function enviarPergunta() {
+    if (enviando) return;
+
+    const input = document.getElementById('questionInput');
+    const pergunta = input.value.trim();
+    if (!pergunta) return;
+
+    const chatBox = document.getElementById('chatBox');
+    const btnEnviar = document.getElementById('btnEnviar');
+    const srStatus = document.getElementById('srStatus');
+
+    chatBox.appendChild(mensagem(pergunta, 'user', 'Você'));
+    input.value = '';
+
+    const typing = document.createElement('div');
+    typing.className = 'typing';
+    typing.id = 'typingIndicator';
+    typing.setAttribute('role', 'status');
+    typing.innerHTML = '<span></span><span></span><span></span>' +
+                       '<span class="visually-hidden">Assistente está respondendo…</span>';
+    chatBox.appendChild(typing);
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    enviando = true;
+    btnEnviar.disabled = true;
+
+    try {
+        const response = await fetch('/ask', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question: pergunta, conversa_id: conversaAtivaId })
+        });
+
+        if (!response.ok) {
+            const erroTexto = await response.text();
+            chatBox.removeChild(typing);
+            chatBox.appendChild(mensagem(`[Erro ${response.status}]: ${erroTexto.slice(0, 500)}`, 'ia erro', 'Erro'));
+            srStatus.textContent = 'Ocorreu um erro ao gerar a resposta.';
+            return;
+        }
+
+        const headerConvId = response.headers.get('X-Conversa-ID');
+        if (headerConvId) conversaAtivaId = parseInt(headerConvId);
+
+        chatBox.removeChild(typing);
+
+        const wrapper = mensagem('', 'ia', 'Assistente DOJUFLA');
+        chatBox.appendChild(wrapper);
+        const corpo = wrapper.querySelector('.msg-body');
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let respostaCompleta = "";
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const texto = decoder.decode(value, { stream: true });
+            respostaCompleta += texto;
+            corpo.textContent = respostaCompleta;
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        if (!respostaCompleta) {
+            corpo.textContent = '[A IA não retornou resposta]';
+        }
+
+        srStatus.textContent = 'Assistente respondeu: ' + corpo.textContent;
+        carregarConversas();
+
+    } catch (err) {
+        console.error("[DOJUFLA] ERRO no fetch:", err);
+        const typingAtual = document.getElementById('typingIndicator');
+        if (typingAtual) chatBox.removeChild(typingAtual);
+        chatBox.appendChild(mensagem(`[Erro de conexão]: ${err.message}`, 'ia erro', 'Erro'));
+        srStatus.textContent = 'Erro de conexão ao contatar o servidor.';
+    } finally {
+        enviando = false;
+        btnEnviar.disabled = false;
+        input.focus();
+    }
+}
+
+/* ---------- Utilidades ---------- */
+
+function mensagem(texto, tipo, rotulo) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'msg ' + tipo;
+
+    const label = document.createElement('span');
+    label.className = 'msg-label';
+    label.textContent = rotulo;
+
+    const body = document.createElement('div');
+    body.className = 'msg-body';
+    body.textContent = texto;
+
+    wrapper.appendChild(label);
+    wrapper.appendChild(body);
+    return wrapper;
+}
+
+function alterarLLM() {
+    const llm = document.getElementById('llmSelect').value;
+    const status = document.getElementById('llmStatus');
+    status.textContent = 'Salvando…';
+
+    fetch('/set_llm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ llm: llm })
+    })
+    .then(res => res.json())
+    .then(data => {
+        status.textContent = data.ok ? 'Modelo salvo.' : 'Não foi possível salvar.';
+        setTimeout(() => status.textContent = '', 2500);
+    })
+    .catch(() => {
+        status.textContent = 'Não foi possível salvar.';
+        setTimeout(() => status.textContent = '', 2500);
+    });
+}
+
+/* ---------- Sidebar responsiva ---------- */
+
+function alternarSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const toggle = document.getElementById('sidebarToggle');
+    const aberta = sidebar.classList.toggle('open');
+    toggle.setAttribute('aria-expanded', aberta ? 'true' : 'false');
+}
+
+function fecharSidebarMobile() {
+    const sidebar = document.getElementById('sidebar');
+    const toggle = document.getElementById('sidebarToggle');
+    if (sidebar.classList.contains('open')) {
+        sidebar.classList.remove('open');
+        toggle.setAttribute('aria-expanded', 'false');
+    }
+}
+</script>
+
+{% endblock %}

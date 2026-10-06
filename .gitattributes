@@ -1,0 +1,11 @@
+# Normalização de fim de linha (repo em LF, ideal para o Render/Linux)
+* text=auto
+
+# Arquivos binários (não converter / não tratar como texto)
+*.pdf   binary
+*.faiss binary
+*.npy   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.ico   binary

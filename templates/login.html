@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Entrar — DOJUFLA{% endblock %}
+
+{% block content %}
+
+<div class="auth-wrapper">
+    <div class="auth-card">
+
+        <div class="auth-head">
+            <span class="brand-badge" aria-hidden="true"><span>DOJU</span><span>FLA</span></span>
+            <h2>Acesso ao sistema</h2>
+            <p>Centro Acadêmico de Artes Marciais e Ciências do Esporte</p>
+        </div>
+
+        <div class="tabs" role="tablist" aria-label="Entrar ou criar conta">
+            <button type="button" role="tab" id="tab-login" aria-controls="panel-login"
+                    aria-selected="{% if modo != 'cadastro' %}true{% else %}false{% endif %}"
+                    class="tab {% if modo != 'cadastro' %}active{% endif %}"
+                    onclick="mostrarAba('login')">Entrar</button>
+            <button type="button" role="tab" id="tab-cadastro" aria-controls="panel-cadastro"
+                    aria-selected="{% if modo == 'cadastro' %}true{% else %}false{% endif %}"
+                    class="tab {% if modo == 'cadastro' %}active{% endif %}"
+                    onclick="mostrarAba('cadastro')">Cadastrar</button>
+        </div>
+
+        <!-- ABA LOGIN -->
+        <div id="panel-login" role="tabpanel" aria-labelledby="tab-login"
+             class="tab-content {% if modo == 'cadastro' %}hidden{% endif %}">
+            {% if erro %}<p class="msg-erro" role="alert">{{ erro }}</p>{% endif %}
+            {% if sucesso %}<p class="msg-sucesso" role="status">{{ sucesso }}</p>{% endif %}
+
+            <form method="POST" class="auth-form">
+                <input type="hidden" name="acao" value="login">
+                <div class="input-group">
+                    <label for="login-username">Usuário</label>
+                    <input id="login-username" type="text" name="username" autocomplete="username" required>
+                </div>
+                <div class="input-group">
+                    <label for="login-password">Senha</label>
+                    <input id="login-password" type="password" name="password" autocomplete="current-password" required>
+                </div>
+                <button type="submit" class="btn-primary">Entrar no sistema</button>
+            </form>
+        </div>
+
+        <!-- ABA CADASTRO -->
+        <div id="panel-cadastro" role="tabpanel" aria-labelledby="tab-cadastro"
+             class="tab-content {% if modo != 'cadastro' %}hidden{% endif %}">
+            {% if erro_cad %}<p class="msg-erro" role="alert">{{ erro_cad }}</p>{% endif %}
+
+            <form method="POST" class="auth-form">
+                <input type="hidden" name="acao" value="register">
+                <div class="input-group">
+                    <label for="cad-username">Usuário</label>
+                    <input id="cad-username" type="text" name="username" autocomplete="username" required>
+                </div>
+                <div class="input-group">
+                    <label for="cad-password">Senha</label>
+                    <input id="cad-password" type="password" name="password"
+                           autocomplete="new-password" minlength="4"
+                           aria-describedby="cad-help" required>
+                    <p id="cad-help" class="field-help">
+                        Mínimo de 4 caracteres. Novas contas entram como usuário comum.
+                    </p>
+                </div>
+                <button type="submit" class="btn-primary">Criar conta</button>
+            </form>
+        </div>
+
+        <p class="auth-footer">Acesso restrito a usuários autorizados.</p>
+
+    </div>
+</div>
+
+<script>
+const abas = [
+    document.getElementById('tab-login'),
+    document.getElementById('tab-cadastro'),
+];
+
+function mostrarAba(aba) {
+    document.getElementById('panel-login').classList.toggle('hidden', aba !== 'login');
+    document.getElementById('panel-cadastro').classList.toggle('hidden', aba !== 'cadastro');
+
+    abas.forEach(tab => {
+        const ativa = tab.id === 'tab-' + aba;
+        tab.classList.toggle('active', ativa);
+        tab.setAttribute('aria-selected', ativa ? 'true' : 'false');
+    });
+}
+
+// Navegação por setas entre as abas (padrão de tablist)
+abas.forEach((tab, i) => {
+    tab.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+        e.preventDefault();
+        const destino = abas[(i + (e.key === 'ArrowRight' ? 1 : abas.length - 1)) % abas.length];
+        destino.focus();
+        destino.click();
+    });
+});
+
+// Se a URL tiver #cadastro, abre a aba de cadastro
+if (window.location.hash === '#cadastro') {
+    mostrarAba('cadastro');
+}
+</script>
+
+{% endblock %}

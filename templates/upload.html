@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}Treinar IA — DOJUFLA{% endblock %}
+
+{% block content %}
+
+<div class="page-wrapper">
+    <div class="upload-card">
+
+        <div class="upload-header">
+            <h2>Treinamento da IA</h2>
+            <p>
+                Envie documentos PDF para ampliar a base de conhecimento do DOJUFLA.
+                O texto é extraído, vetorizado e o índice de busca é reconstruído automaticamente.
+            </p>
+        </div>
+
+        {% if mensagem %}
+            <div class="upload-feedback {% if '⚠️' in mensagem %}aviso{% else %}sucesso{% endif %}"
+                 role="{% if '⚠️' in mensagem %}alert{% else %}status{% endif %}">
+                {{ mensagem }}
+            </div>
+        {% endif %}
+
+        <section class="kb-panel" aria-label="Situação atual da base de conhecimento">
+            <h3>Situação atual da base</h3>
+            <div class="stats-grid">
+                <div class="stat">
+                    <span class="stat-value">{{ stats.blocos }}</span>
+                    <span class="stat-label">Blocos indexados</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value">{{ stats.vetores }}</span>
+                    <span class="stat-label">Vetores no índice</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value">{{ stats.pdfs }}</span>
+                    <span class="stat-label">PDFs na base</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value stat-model">{{ stats.modelo }}</span>
+                    <span class="stat-label">Modelo de embeddings</span>
+                </div>
+            </div>
+            <p class="kb-note">
+                Se os números aumentarem após o envio, o novo conteúdo foi incorporado à busca.
+            </p>
+        </section>
+
+        <form method="POST" enctype="multipart/form-data" class="upload-form" id="uploadForm">
+
+            <label for="fileInput" class="drop-zone" id="dropZone"
+                   aria-describedby="fileHint dropHelp">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none"
+                     stroke="#005C2B" stroke-width="1.5" aria-hidden="true" focusable="false">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <span class="drop-title">Arraste um PDF aqui ou clique para selecionar</span>
+                <span class="drop-hint" id="fileHint">Nenhum arquivo selecionado</span>
+                <input type="file" name="file" id="fileInput" accept=".pdf,application/pdf" required
+                       class="visually-hidden">
+            </label>
+            <p id="dropHelp" class="field-help">Somente arquivos no formato PDF são aceitos.</p>
+
+            <button type="submit" class="btn-primary" id="btnSubmit" disabled>
+                Enviar e treinar IA
+            </button>
+
+        </form>
+
+        <div class="upload-actions">
+            <a href="{{ url_for('retrain') }}" class="btn-secondary">
+                Reindexar com os documentos existentes
+            </a>
+        </div>
+
+        <section class="upload-info">
+            <h3>Como funciona</h3>
+            <ol>
+                <li>O PDF é salvo na pasta <code>documentos/</code>.</li>
+                <li>O texto é extraído e dividido em blocos.</li>
+                <li>Cada bloco vira um vetor no índice FAISS.</li>
+                <li>A IA passa a responder com base no novo conteúdo.</li>
+            </ol>
+        </section>
+
+    </div>
+</div>
+
+<script>
+const fileInput = document.getElementById('fileInput');
+const fileHint  = document.getElementById('fileHint');
+const btnSubmit = document.getElementById('btnSubmit');
+const dropZone  = document.getElementById('dropZone');
+
+fileInput.addEventListener('change', () => {
+    if (fileInput.files.length > 0) {
+        fileHint.textContent = fileInput.files[0].name;
+        fileHint.classList.add('has-file');
+        btnSubmit.disabled = false;
+    } else {
+        fileHint.textContent = 'Nenhum arquivo selecionado';
+        fileHint.classList.remove('has-file');
+        btnSubmit.disabled = true;
+    }
+});
+
+// Suporte a drag & drop visual
+['dragenter', 'dragover'].forEach(evt =>
+    dropZone.addEventListener(evt, e => {
+        e.preventDefault();
+        dropZone.classList.add('dragging');
+    })
+);
+
+['dragleave', 'drop'].forEach(evt =>
+    dropZone.addEventListener(evt, e => {
+        e.preventDefault();
+        dropZone.classList.remove('dragging');
+    })
+);
+
+dropZone.addEventListener('drop', e => {
+    const files = e.dataTransfer.files;
+    if (files.length > 0 && files[0].name.toLowerCase().endsWith('.pdf')) {
+        fileInput.files = files;
+        fileInput.dispatchEvent(new Event('change'));
+    }
+});
+
+// Feedback visual ao enviar
+document.getElementById('uploadForm').addEventListener('submit', () => {
+    btnSubmit.disabled = true;
+    btnSubmit.textContent = 'Processando…';
+});
+</script>
+
+{% endblock %}

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Assistente virtual do DOJUFLA — Centro Acadêmico de Artes Marciais e Ciências do Esporte da Universidade Federal de Lavras.">
+    <title>{% block title %}DOJUFLA — Centro Acadêmico{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<a class="skip-link" href="#conteudo">Pular para o conteúdo principal</a>
+
+<div class="gov-bar">
+    <div class="container gov-bar-inner">
+        <span>Universidade Federal de Lavras</span>
+        <span class="gov-bar-sep" aria-hidden="true">•</span>
+        <span>Centro Acadêmico DOJUFLA</span>
+    </div>
+</div>
+
+<header class="site-header">
+    <div class="container header-container">
+        <div class="brand">
+            <span class="brand-badge" aria-hidden="true"><span>DOJU</span><span>FLA</span></span>
+            <div class="brand-text">
+                <h1>DOJUFLA</h1>
+                <p>Centro Acadêmico de Artes Marciais e Ciências do Esporte</p>
+            </div>
+        </div>
+
+        <nav aria-label="Navegação principal" class="main-nav">
+            <ul>
+                {% if current_user.is_authenticated %}
+                    <li>
+                        <a href="{{ url_for('home') }}" {% if request.endpoint == 'home' %}aria-current="page"{% endif %}>
+                            Consulta IA
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('sobre') }}" {% if request.endpoint == 'sobre' %}aria-current="page"{% endif %}>
+                            Quem Somos
+                        </a>
+                    </li>
+                    {% if current_user.is_moderator_or_above() %}
+                        <li>
+                            <a href="{{ url_for('upload') }}" {% if request.endpoint == 'upload' %}aria-current="page"{% endif %}>
+                                Treinar IA
+                            </a>
+                        </li>
+                    {% endif %}
+                    {% if current_user.is_admin_or_above() %}
+                        <li>
+                            <a href="{{ url_for('admin_usuarios') }}" {% if request.endpoint == 'admin_usuarios' %}aria-current="page"{% endif %}>
+                                Usuários
+                            </a>
+                        </li>
+                    {% endif %}
+                    <li class="nav-account">
+                        <span class="nav-user">{{ current_user.username }} · {{ current_user.role }}</span>
+                        <a href="{{ url_for('logout') }}" class="nav-logout">Sair</a>
+                    </li>
+                {% else %}
+                    <li>
+                        <a href="{{ url_for('login') }}" {% if request.endpoint == 'login' %}aria-current="page"{% endif %}>
+                            Entrar
+                        </a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</header>
+
+<main id="conteudo" tabindex="-1">
+    {% block content %}{% endblock %}
+</main>
+
+<footer class="site-footer">
+    <div class="container">
+        <p>© 2026 DOJUFLA · Centro Acadêmico de Artes Marciais e Ciências do Esporte · Universidade Federal de Lavras</p>
+        <p class="footer-note">Projeto acadêmico. As respostas são geradas por inteligência artificial e podem conter imprecisões.</p>
+    </div>
+</footer>
+
+</body>
+</html>

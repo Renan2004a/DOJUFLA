@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Gerenciar Usuários — DOJUFLA{% endblock %}
+
+{% block content %}
+
+{% set role_labels = {
+    'usuario': 'Usuário',
+    'moderador': 'Moderador',
+    'admin': 'Administrador',
+    'super_admin': 'Super Administrador'
+} %}
+
+<div class="page-wrapper">
+    <div class="admin-card">
+
+        <h2>Gerenciar Usuários</h2>
+        <p class="page-intro">
+            Você só pode gerenciar usuários de nível <strong>inferior</strong> ao seu —
+            nunca do mesmo nível ou acima.
+        </p>
+
+        <div class="hierarchy" aria-label="Hierarquia de cargos">
+            <span class="role-badge role-usuario">Usuário</span>
+            <span aria-hidden="true" class="hierarchy-sep">&lt;</span>
+            <span class="role-badge role-moderador">Moderador</span>
+            <span aria-hidden="true" class="hierarchy-sep">&lt;</span>
+            <span class="role-badge role-admin">Administrador</span>
+            <span aria-hidden="true" class="hierarchy-sep">&lt;</span>
+            <span class="role-badge role-super_admin">Super Administrador</span>
+        </div>
+
+        {% if erro %}<p class="msg-erro" role="alert">{{ erro }}</p>{% endif %}
+        {% if ok %}<p class="msg-sucesso" role="status">{{ ok }}</p>{% endif %}
+
+        {% if usuarios %}
+            <div class="table-scroll">
+            <table class="data-table">
+                <caption class="visually-hidden">Usuários que você pode gerenciar</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">ID</th>
+                        <th scope="col">Usuário</th>
+                        <th scope="col">Cargo atual</th>
+                        <th scope="col">Alterar cargo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in usuarios %}
+                    <tr>
+                        <td>{{ u.id }}</td>
+                        <td>{{ u.username }}</td>
+                        <td>
+                            <span class="role-badge role-{{ u.role }}">
+                                {{ role_labels.get(u.role, u.role) }}
+                            </span>
+                        </td>
+                        <td>
+                            <form method="POST" action="{{ url_for('alterar_role', user_id=u.id) }}" class="role-form">
+                                <label class="visually-hidden" for="role-{{ u.id }}">
+                                    Novo cargo para {{ u.username }}
+                                </label>
+                                <select id="role-{{ u.id }}" name="role">
+                                    {% for r in roles %}
+                                        <option value="{{ r }}" {% if r == u.role %}selected{% endif %}>
+                                            {{ role_labels.get(r, r) }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                                <button type="submit" class="btn-secondary btn-small">Salvar</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        {% else %}
+            <p class="empty-state">Não há usuários de nível inferior que você possa gerenciar.</p>
+        {% endif %}
+
+        <p class="admin-note">
+            O cargo <strong>Super Administrador</strong> só pode ser definido por script
+            (<code>create_admin.py</code> / <code>promover_super_admin.py</code>).
+        </p>
+
+    </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,25 @@
+# ---------- Ambiente virtual ----------
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# ---------- Segredos ----------
+.env
+*.env
+!.env.example
+
+# ---------- Banco de dados local (contém dados de usuários) ----------
+database.db
+usuarios.db
+*.sqlite3
+*.db-journal
+
+# ---------- Cache de modelos / logs ----------
+.cache/
+rag/fastembed_cache/
+*.log
+
+# ---------- Sistema / editor ----------
+.DS_Store
+Thumbs.db

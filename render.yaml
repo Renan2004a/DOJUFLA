@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: dojufla
+    runtime: python
+    plan: free
+    buildCommand: >-
+      pip install -r requirements.txt gunicorn &&
+      python -c "from rag.vectorstore import model; list(model.embed(['warmup']))"
+    startCommand: gunicorn app:app --workers 1 --bind 0.0.0.0:$PORT --timeout 120
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.9
+      - key: DOJUFLA_SECRET_KEY
+        generateValue: true
+      - key: GROQ_API_KEY
+        sync: false
+      - key: DEFAULT_LLM
+        value: groq
+      - key: SUPERADMIN_USER
+        value: admin
+      - key: SUPERADMIN_PASSWORD
+        sync: false

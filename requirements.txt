@@ -1,0 +1,22 @@
+# ============================================================
+# DOJUFLA - dependências do projeto
+# Instalar com:  python -m pip install -r requirements.txt
+# (use o Python do venv: venv\Scripts\python.exe)
+# ============================================================
+
+# --- Web ---
+Flask==3.0.3
+Flask-Login==0.6.3
+Werkzeug==3.0.4
+
+# --- Configuração (.env) ---
+python-dotenv==1.0.1
+
+# --- RAG: busca vetorial, embeddings (ONNX, sem torch) e leitura de PDF ---
+faiss-cpu==1.8.0
+numpy==1.26.4
+pypdf==4.2.0
+fastembed==0.8.1
+
+# --- HTTP (Ollama local / Groq na nuvem) ---
+requests==2.32.3

@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "DOJUFLA (Flask)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}\\app.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONIOENCODING": "utf-8"
+            }
+        }
+    ]
+}
