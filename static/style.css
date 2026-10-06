@@ -180,23 +180,11 @@ main {
     gap: 14px;
 }
 
-.brand-badge {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    width: 54px;
-    height: 54px;
+.brand-logo {
     flex: 0 0 auto;
-    border-radius: 12px;
-    background: #fff;
-    color: var(--verde-primario);
-    font-weight: 800;
-    font-size: 0.72rem;
-    line-height: 1.05;
-    letter-spacing: 0.5px;
-    border: 2px solid rgba(255, 255, 255, 0.7);
-    box-shadow: inset 0 0 0 2px var(--verde-brilho);
+    display: block;
+    width: 56px;
+    height: 56px;
 }
 
 .brand-text h1 {
@@ -667,11 +655,9 @@ textarea:hover {
     gap: 8px;
 }
 
-.auth-head .brand-badge {
-    background: var(--verde-primario);
-    color: #fff;
-    border: 2px solid var(--verde-brilho);
-    box-shadow: none;
+.auth-head .brand-logo {
+    width: 68px;
+    height: 68px;
 }
 
 .auth-head h2 {

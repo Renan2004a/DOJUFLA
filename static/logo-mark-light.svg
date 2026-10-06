@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="DOJUFLA">
+  <title>DOJUFLA</title>
+  <circle cx="256" cy="256" r="196" fill="none" stroke="#FFC72C" stroke-width="16"
+          stroke-linecap="round" stroke-dasharray="1040 190" transform="rotate(-38 256 256)"/>
+  <path fill-rule="evenodd" fill="#FFFFFF"
+        d="M190 142 H282 C352 142 404 194 404 256 C404 318 352 370 282 370 H190 Z
+           M252 202 H280 C312 202 338 226 338 256 C338 286 312 310 280 310 H252 Z"/>
+</svg>
