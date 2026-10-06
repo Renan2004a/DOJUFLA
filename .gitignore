@@ -17,6 +17,7 @@ usuarios.db
 
 # ---------- Cache de modelos / logs ----------
 .cache/
+.pytest_cache/
 *.log
 
 # ---------- Sistema / editor ----------

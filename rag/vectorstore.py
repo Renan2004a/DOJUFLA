@@ -1,132 +1,163 @@
+"""Índice vetorial (RAG) construído com LangChain + FAISS.
+
+Responsabilidades:
+- carregar os documentos (texto base + PDFs);
+- dividir em blocos;
+- gerar embeddings e indexar no FAISS;
+- persistir/carregar o índice e reconstruí-lo quando os documentos mudam.
+"""
+import hashlib
+import json
+import logging
 import os
-import faiss
-import numpy as np
-from sentence_transformers import SentenceTransformer
-from pypdf import PdfReader
+
+from langchain_community.document_loaders import PyPDFLoader, TextLoader
+from langchain_community.vectorstores import FAISS
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+from config import Config
+
+logger = logging.getLogger(__name__)
+
+# Cache em memória do índice carregado.
+_vectorstore = None
+_embeddings = None
 
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RAG_DIR = os.path.join(BASE_DIR, "rag")
-
-DATA_PATH = os.path.join(BASE_DIR, "data", "base_conhecimento.txt")
-DOCS_FOLDER = os.path.join(BASE_DIR, "documentos")
-INDEX_PATH = os.path.join(RAG_DIR, "index.faiss")
-DOCS_PATH = os.path.join(RAG_DIR, "docs.npy")
-META_PATH = os.path.join(RAG_DIR, "meta.npy")
-
-model = SentenceTransformer("all-MiniLM-L6-v2")
-
-
-def dividir_em_blocos(texto, tamanho=800, sobreposicao=150):
-    blocos = []
-    passo = tamanho - sobreposicao
-    for i in range(0, len(texto), passo):
-        bloco = texto[i:i+tamanho]
-        if bloco.strip():
-            blocos.append(bloco.strip())
-    return blocos
+def get_embeddings() -> HuggingFaceEmbeddings:
+    """Instancia (uma vez) o modelo de embeddings."""
+    global _embeddings
+    if _embeddings is None:
+        logger.info("Carregando modelo de embeddings: %s", Config.EMBED_MODEL)
+        _embeddings = HuggingFaceEmbeddings(
+            model_name=Config.EMBED_MODEL,
+            model_kwargs={"device": "cpu"},
+            encode_kwargs={"normalize_embeddings": True},
+        )
+    return _embeddings
 
 
-def extrair_texto_pdf(caminho):
-    reader = PdfReader(caminho)
-    texto = ""
-    for pagina in reader.pages:
-        conteudo = pagina.extract_text()
-        if conteudo:
-            texto += conteudo + "\n"
-    return texto
+def _fingerprint() -> str:
+    """Assinatura do conteúdo dos documentos (estável entre clones do Git)."""
+    digest = hashlib.md5()
+    if os.path.exists(Config.DATA_FILE):
+        with open(Config.DATA_FILE, "rb") as handle:
+            digest.update(handle.read())
+    if os.path.isdir(Config.DOCS_DIR):
+        for name in sorted(os.listdir(Config.DOCS_DIR)):
+            if name.lower().endswith(".pdf"):
+                digest.update(name.encode("utf-8"))
+                with open(os.path.join(Config.DOCS_DIR, name), "rb") as handle:
+                    digest.update(handle.read())
+    return digest.hexdigest()
 
 
-def load_txt_documents():
-    docs = []
-    if os.path.exists(DATA_PATH):
-        with open(DATA_PATH, "r", encoding="utf-8") as f:
-            docs.extend(dividir_em_blocos(f.read()))
-    return docs
+def _load_documents() -> list:
+    documents = []
+    if os.path.exists(Config.DATA_FILE):
+        documents.extend(TextLoader(Config.DATA_FILE, encoding="utf-8").load())
+    if os.path.isdir(Config.DOCS_DIR):
+        for name in sorted(os.listdir(Config.DOCS_DIR)):
+            if name.lower().endswith(".pdf"):
+                logger.info("Carregando PDF: %s", name)
+                documents.extend(PyPDFLoader(os.path.join(Config.DOCS_DIR, name)).load())
+    return documents
 
 
-def load_pdf_documents():
-    docs = []
-    if not os.path.exists(DOCS_FOLDER):
-        return docs
-    for arquivo in os.listdir(DOCS_FOLDER):
-        if arquivo.lower().endswith(".pdf"):
-            caminho = os.path.join(DOCS_FOLDER, arquivo)
-            print(f"Carregando PDF: {arquivo}")
-            docs.extend(dividir_em_blocos(extrair_texto_pdf(caminho)))
-    return docs
+def _split(documents: list) -> list:
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=Config.CHUNK_SIZE,
+        chunk_overlap=Config.CHUNK_OVERLAP,
+        separators=["\n\n", "\n", ". ", " ", ""],
+    )
+    return splitter.split_documents(documents)
 
 
-def _fingerprint_docs():
-    """Assinatura baseada no CONTEÚDO dos documentos (estável entre clones/git)."""
-    import hashlib
-    h = hashlib.md5()
-    if os.path.exists(DATA_PATH):
-        with open(DATA_PATH, "rb") as f:
-            h.update(f.read())
-    if os.path.exists(DOCS_FOLDER):
-        for arq in sorted(os.listdir(DOCS_FOLDER)):
-            if arq.lower().endswith(".pdf"):
-                h.update(arq.encode())
-                with open(os.path.join(DOCS_FOLDER, arq), "rb") as f:
-                    h.update(f.read())
-    return h.hexdigest()
+def _saved_meta() -> dict:
+    if os.path.exists(Config.INDEX_META):
+        try:
+            with open(Config.INDEX_META, encoding="utf-8") as handle:
+                return json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            logger.warning("meta.json inválido; o índice será reconstruído.")
+    return {}
 
 
-def rebuild_vectorstore():
-    """Força a reconstrução do índice FAISS do zero."""
-    print("🔨 Reconstruindo índice vetorial do zero...")
+def _save_meta(blocks: int) -> None:
+    with open(Config.INDEX_META, "w", encoding="utf-8") as handle:
+        json.dump({"fingerprint": _fingerprint(), "blocos": blocks}, handle)
 
-    docs = []
-    docs.extend(load_txt_documents())
-    docs.extend(load_pdf_documents())
 
-    if not docs:
+def rebuild_vectorstore() -> FAISS:
+    """Reconstrói o índice do zero a partir dos documentos atuais."""
+    global _vectorstore
+    documents = _split(_load_documents())
+    if not documents:
         raise ValueError("Nenhum documento encontrado para indexação.")
 
-    print(f"Total de blocos carregados: {len(docs)}")
+    logger.info("Indexando %d blocos...", len(documents))
+    _vectorstore = FAISS.from_documents(documents, get_embeddings())
 
-    embeddings = model.encode(docs, convert_to_numpy=True, show_progress_bar=True)
-    dimension = embeddings.shape[1]
-
-    index = faiss.IndexFlatL2(dimension)
-    index.add(embeddings)
-
-    os.makedirs(RAG_DIR, exist_ok=True)
-    faiss.write_index(index, INDEX_PATH)
-    np.save(DOCS_PATH, np.array(docs, dtype=object))
-    np.save(META_PATH, np.array([_fingerprint_docs()], dtype=object))
-
-    print("✅ Índice FAISS reconstruído e salvo.")
-    return index, docs
+    os.makedirs(Config.RAG_DIR, exist_ok=True)
+    _vectorstore.save_local(Config.RAG_DIR)
+    _save_meta(len(documents))
+    logger.info("Índice salvo com %d vetores.", _vectorstore.index.ntotal)
+    return _vectorstore
 
 
-def create_vectorstore():
-    """Carrega o índice salvo, mas reconstrói se os documentos mudaram."""
-    if os.path.exists(INDEX_PATH) and os.path.exists(DOCS_PATH):
-        # Verifica se os documentos mudaram desde a última indexação
-        try:
-            if os.path.exists(META_PATH):
-                meta_salva = np.load(META_PATH, allow_pickle=True)[0]
-                if meta_salva != _fingerprint_docs():
-                    print("⚠️ Documentos alterados detectados. Reconstruindo índice...")
-                    return rebuild_vectorstore()
-        except Exception as e:
-            print(f"[aviso] Não foi possível verificar fingerprint: {e}")
+def load_vectorstore() -> FAISS:
+    """Carrega o índice salvo; reconstrói se estiver ausente/desatualizado."""
+    global _vectorstore
+    if _vectorstore is not None:
+        return _vectorstore
 
-        print("Carregando índice FAISS salvo...")
-        index = faiss.read_index(INDEX_PATH)
-        docs = np.load(DOCS_PATH, allow_pickle=True).tolist()
-        return index, docs
+    up_to_date = (
+        os.path.exists(Config.INDEX_FILE)
+        and _saved_meta().get("fingerprint") == _fingerprint()
+    )
+    if up_to_date:
+        logger.info("Carregando índice FAISS salvo...")
+        _vectorstore = FAISS.load_local(
+            Config.RAG_DIR,
+            get_embeddings(),
+            allow_dangerous_deserialization=True,
+        )
+    else:
+        logger.info("Índice ausente/desatualizado. Reconstruindo...")
+        rebuild_vectorstore()
+    return _vectorstore
 
-    return rebuild_vectorstore()
+
+def get_vectorstore():
+    """Retorna o índice ou ``None`` se não for possível carregá-lo."""
+    try:
+        return load_vectorstore()
+    except Exception:  # pragma: no cover - depende de arquivos externos
+        logger.exception("Falha ao carregar o vectorstore.")
+        return None
 
 
-def retrieve(query, index, docs, top_k=4):
-    query_embedding = model.encode([query], convert_to_numpy=True)
-    distances, indices = index.search(query_embedding, top_k)
-    resultados = []
-    for i in indices[0]:
-        if 0 <= i < len(docs):
-            resultados.append(docs[i])
-    return resultados
+def retrieve(query: str, vectorstore=None, k: int = None) -> list:
+    """Retorna os textos dos ``k`` blocos mais similares à pergunta."""
+    if vectorstore is None:
+        return []
+    k = k or Config.RETRIEVE_K
+    return [doc.page_content for doc in vectorstore.similarity_search(query, k=k)]
+
+
+def stats() -> dict:
+    """Resumo da base para a tela de treinamento."""
+    total_pdfs = 0
+    if os.path.isdir(Config.DOCS_DIR):
+        total_pdfs = len(
+            [f for f in os.listdir(Config.DOCS_DIR) if f.lower().endswith(".pdf")]
+        )
+    blocks = _saved_meta().get("blocos", 0)
+    vectors = _vectorstore.index.ntotal if _vectorstore is not None else blocks
+    return {
+        "modelo": Config.EMBED_MODEL,
+        "blocos": blocks,
+        "vetores": vectors,
+        "pdfs": total_pdfs,
+    }

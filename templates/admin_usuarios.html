@@ -56,7 +56,7 @@
                             </span>
                         </td>
                         <td>
-                            <form method="POST" action="{{ url_for('alterar_role', user_id=u.id) }}" class="role-form">
+                            <form method="POST" action="{{ url_for('admin.alterar_role', user_id=u.id) }}" class="role-form">
                                 <label class="visually-hidden" for="role-{{ u.id }}">
                                     Novo cargo para {{ u.username }}
                                 </label>

@@ -1,0 +1,49 @@
+"""Configuração central da aplicação.
+
+Todos os valores podem ser sobrescritos por variáveis de ambiente ou por um
+arquivo ``.env`` na raiz do projeto.
+"""
+import os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Carrega o .env (se existir) antes de ler qualquer variável.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(os.path.join(BASE_DIR, ".env"))
+except Exception:  # pragma: no cover - dotenv é opcional
+    pass
+
+
+class Config:
+    # ----- Caminhos -----
+    BASE_DIR = BASE_DIR
+    DATABASE = os.path.join(BASE_DIR, "database.db")
+    DOCS_DIR = os.path.join(BASE_DIR, "documentos")
+    DATA_FILE = os.path.join(BASE_DIR, "data", "base_conhecimento.txt")
+    RAG_DIR = os.path.join(BASE_DIR, "rag")
+    INDEX_FILE = os.path.join(RAG_DIR, "index.faiss")
+    INDEX_META = os.path.join(RAG_DIR, "meta.json")
+
+    # ----- Flask -----
+    SECRET_KEY = os.environ.get("DOJUFLA_SECRET_KEY", "dev-secret-troque-isto")
+
+    # ----- Pré-processamento / busca -----
+    EMBED_MODEL = os.environ.get("EMBED_MODEL", "all-MiniLM-L6-v2")
+    CHUNK_SIZE = int(os.environ.get("CHUNK_SIZE", "800"))
+    CHUNK_OVERLAP = int(os.environ.get("CHUNK_OVERLAP", "150"))
+    RETRIEVE_K = int(os.environ.get("RETRIEVE_K", "4"))
+    HISTORY_LIMIT = int(os.environ.get("HISTORY_LIMIT", "6"))
+
+    # ----- LLMs -----
+    OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
+    OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3")
+    OLLAMA_TIMEOUT = int(os.environ.get("OLLAMA_TIMEOUT", "120"))
+
+    GROQ_URL = os.environ.get("GROQ_URL", "https://api.groq.com/openai/v1/chat/completions")
+    GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+    GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+
+    DEFAULT_LLM = os.environ.get("DEFAULT_LLM", "ollama")
+    AVAILABLE_LLMS = ("ollama", "groq")

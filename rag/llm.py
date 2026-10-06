@@ -1,25 +1,19 @@
-import os
-import requests
-from typing import List, Generator, Union
+"""Integração com as LLMs suportadas (Ollama local e Groq na nuvem).
+
+Expõe uma única função, :func:`gerar_resposta`, que devolve um gerador de
+tokens (streaming), independentemente do provedor escolhido.
+"""
 import json
+import logging
+from typing import Generator, List, Union
 
-# ===================== CONFIG (variáveis de ambiente) =====================
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3")
+import requests
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
-GROQ_URL = os.environ.get("GROQ_URL", "https://api.groq.com/openai/v1/chat/completions")
+from config import Config
 
+logger = logging.getLogger(__name__)
 
-def montar_prompt(contexto: str, pergunta: str, historico: List[str] = None) -> str:
-    historico_formatado = ""
-
-    if historico:
-        historico_formatado = "\n".join(historico)
-
-    prompt = f"""
-Você é a Assistente Oficial do DOJUFLA,
+_SYSTEM_PROMPT = """Você é a Assistente Oficial do DOJUFLA,
 Centro Acadêmico de Artes Marciais e Ciências do Esporte.
 
 Seu foco principal é esporte em geral, na educação física e com ênfase em artes marciais
@@ -43,7 +37,7 @@ Diretrizes:
 - Fisiologia do exercício
 
 HISTÓRICO DA CONVERSA:
-{historico_formatado}
+{historico}
 
 CONTEXTO:
 {contexto}
@@ -51,84 +45,100 @@ CONTEXTO:
 PERGUNTA:
 {pergunta}
 
-RESPOSTA:
-"""
-    return prompt.strip()
+RESPOSTA:"""
 
 
-# ===================== OLLAMA =====================
+def montar_prompt(contexto: str, pergunta: str, historico: List[str] = None) -> str:
+    """Monta o prompt final enviado à LLM."""
+    historico_formatado = "\n".join(historico) if historico else ""
+    return _SYSTEM_PROMPT.format(
+        historico=historico_formatado,
+        contexto=contexto or "(sem contexto)",
+        pergunta=pergunta,
+    ).strip()
+
+
 def _ollama_stream(prompt: str) -> Generator[str, None, None]:
+    """Streaming via Ollama (modelo local)."""
     try:
         response = requests.post(
-            OLLAMA_URL,
+            Config.OLLAMA_URL,
             json={
-                "model": OLLAMA_MODEL,
+                "model": Config.OLLAMA_MODEL,
                 "prompt": prompt,
                 "stream": True,
-                "options": {"temperature": 0.2, "top_p": 0.9, "num_ctx": 4096}
+                "options": {"temperature": 0.2, "top_p": 0.9, "num_ctx": 4096},
             },
             stream=True,
-            timeout=60
+            timeout=Config.OLLAMA_TIMEOUT,
         )
+        response.raise_for_status()
         for line in response.iter_lines():
             if line:
                 chunk = json.loads(line)
                 yield chunk.get("response", "")
-    except Exception as e:
-        yield f"\n[ERRO OLLAMA]: {str(e)}"
+    except Exception as exc:  # noqa: BLE001 - queremos devolver a mensagem ao usuário
+        logger.exception("Erro no Ollama")
+        yield f"\n[ERRO OLLAMA]: {exc}"
 
 
-# ===================== GROQ =====================
 def _groq_stream(prompt: str) -> Generator[str, None, None]:
-    if not GROQ_API_KEY:
+    """Streaming via Groq (API na nuvem)."""
+    if not Config.GROQ_API_KEY:
         yield "\n[ERRO GROQ]: variável de ambiente GROQ_API_KEY não configurada."
         return
     try:
-        headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        body = {
-            "model": GROQ_MODEL,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.2,
-            "max_tokens": 2048,
-            "stream": True
-        }
-        response = requests.post(GROQ_URL, headers=headers, json=body, stream=True, timeout=60)
-
+        response = requests.post(
+            Config.GROQ_URL,
+            headers={
+                "Authorization": f"Bearer {Config.GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": Config.GROQ_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.2,
+                "max_tokens": 2048,
+                "stream": True,
+            },
+            stream=True,
+            timeout=Config.OLLAMA_TIMEOUT,
+        )
+        response.raise_for_status()
         for line in response.iter_lines():
-            if line:
-                decoded = line.decode("utf-8") if isinstance(line, bytes) else line
-                if decoded.startswith("data:"):
-                    decoded = decoded[5:].strip()
-                if decoded and decoded != "[DONE]":
-                    try:
-                        chunk = json.loads(decoded)
-                        text = chunk["choices"][0]["delta"].get("content", "")
-                        if text:
-                            yield text
-                    except:
-                        pass
-    except Exception as e:
-        yield f"\n[ERRO GROQ]: {str(e)}"
+            if not line:
+                continue
+            decoded = line.decode("utf-8") if isinstance(line, bytes) else line
+            if decoded.startswith("data:"):
+                decoded = decoded[5:].strip()
+            if not decoded or decoded == "[DONE]":
+                continue
+            try:
+                chunk = json.loads(decoded)
+                text = chunk["choices"][0]["delta"].get("content", "")
+                if text:
+                    yield text
+            except (json.JSONDecodeError, KeyError, IndexError):
+                continue
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Erro no Groq")
+        yield f"\n[ERRO GROQ]: {exc}"
 
 
-# ===================== INTERFACE PRINCIPAL =====================
+_ENGINES = {
+    "ollama": _ollama_stream,
+    "groq": _groq_stream,
+}
+
+
 def gerar_resposta(
     contexto: str,
     pergunta: str,
     historico: List[str] = None,
-    stream: bool = False,
-    llm: str = "ollama"
+    stream: bool = True,
+    llm: str = "ollama",
 ) -> Union[str, Generator[str, None, None]]:
-
+    """Gera a resposta usando o provedor escolhido (padrão: Ollama)."""
     prompt = montar_prompt(contexto, pergunta, historico)
-
-    roteador = {
-        "ollama": _ollama_stream,
-        "groq":   _groq_stream,
-    }
-
-    gerador = roteador.get(llm, _ollama_stream)
-    return gerador(prompt)
+    engine = _ENGINES.get(llm, _ollama_stream)
+    return engine(prompt)

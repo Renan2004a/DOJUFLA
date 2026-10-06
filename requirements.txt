@@ -18,6 +18,12 @@ numpy==1.26.4
 pypdf==4.2.0
 sentence-transformers==3.1.1
 
+# --- Orquestração do RAG (LangChain) ---
+langchain-core==0.2.43
+langchain-community==0.2.16
+langchain-huggingface==0.0.3
+langchain-text-splitters==0.2.4
+
 # --- Base dos embeddings (fixado para reprodutibilidade) ---
 torch==2.4.1
 transformers==4.46.3
