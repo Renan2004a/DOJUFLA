@@ -17,3 +17,16 @@ services:
         value: admin
       - key: SUPERADMIN_PASSWORD
         sync: false
+      # Limita threads/arenas (reduz muito a memória no Linux)
+      - key: MALLOC_ARENA_MAX
+        value: "2"
+      - key: OMP_NUM_THREADS
+        value: "1"
+      - key: OPENBLAS_NUM_THREADS
+        value: "1"
+      - key: NUMEXPR_NUM_THREADS
+        value: "1"
+      - key: EMBED_THREADS
+        value: "1"
+      - key: TOKENIZERS_PARALLELISM
+        value: "false"

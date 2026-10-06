@@ -19,8 +19,12 @@ EMBED_MODEL = os.environ.get("EMBED_MODEL", "BAAI/bge-small-en-v1.5")
 EMBED_CACHE = os.environ.get(
     "FASTEMBED_CACHE_PATH", os.path.join(RAG_DIR, "fastembed_cache")
 )
+# 1 thread ajuda a manter a memória baixa em servidores pequenos (ex.: Render free).
+EMBED_THREADS = int(os.environ.get("EMBED_THREADS", "1"))
 
-model = TextEmbedding(model_name=EMBED_MODEL, cache_dir=EMBED_CACHE)
+model = TextEmbedding(
+    model_name=EMBED_MODEL, cache_dir=EMBED_CACHE, threads=EMBED_THREADS
+)
 
 
 def dividir_em_blocos(texto, tamanho=800, sobreposicao=150):
