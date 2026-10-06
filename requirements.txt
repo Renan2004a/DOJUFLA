@@ -12,11 +12,16 @@ Werkzeug==3.0.4
 # --- Configuração (.env) ---
 python-dotenv==1.0.1
 
-# --- RAG: busca vetorial, embeddings (ONNX, sem torch) e leitura de PDF ---
+# --- RAG: busca vetorial, embeddings e leitura de PDF ---
 faiss-cpu==1.8.0
 numpy==1.26.4
 pypdf==4.2.0
-fastembed==0.8.1
+sentence-transformers==3.1.1
+
+# --- Base dos embeddings (fixado para reprodutibilidade) ---
+torch==2.4.1
+transformers==4.46.3
+huggingface-hub==0.25.2
 
 # --- HTTP (Ollama local / Groq na nuvem) ---
 requests==2.32.3

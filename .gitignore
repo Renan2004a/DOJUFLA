@@ -17,7 +17,6 @@ usuarios.db
 
 # ---------- Cache de modelos / logs ----------
 .cache/
-rag/fastembed_cache/
 *.log
 
 # ---------- Sistema / editor ----------

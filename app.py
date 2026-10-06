@@ -29,39 +29,8 @@ except Exception:
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOCS_DIR = os.path.join(BASE_DIR, "documentos")
 
-# LLM padrão para novos usuários (em produção no Render use "groq", pois não há Ollama).
-DEFAULT_LLM = os.environ.get("DEFAULT_LLM", "ollama")
-
 app = Flask(__name__)
 app.secret_key = os.environ.get("DOJUFLA_SECRET_KEY", "secret_dojufla_key")
-
-
-def ensure_super_admin():
-    """
-    Garante um super_admin a partir das variáveis de ambiente.
-    Útil em deploys com banco efêmero (ex.: Render), onde o SQLite é recriado.
-    Só age se SUPERADMIN_USER e SUPERADMIN_PASSWORD estiverem definidos.
-    """
-    user = os.environ.get("SUPERADMIN_USER")
-    pwd = os.environ.get("SUPERADMIN_PASSWORD")
-    if not user or not pwd:
-        return
-
-    conn = get_db()
-    try:
-        row = conn.execute("SELECT id FROM usuarios WHERE username=?", (user,)).fetchone()
-        if row:
-            conn.execute("UPDATE usuarios SET role='super_admin' WHERE id=?", (row["id"],))
-        else:
-            conn.execute(
-                "INSERT INTO usuarios (username, password, role, llm_preference) "
-                "VALUES (?, ?, 'super_admin', ?)",
-                (user, generate_password_hash(pwd), DEFAULT_LLM),
-            )
-        conn.commit()
-        print(f"[seed] super_admin garantido: {user}")
-    finally:
-        conn.close()
 
 # ================= DIAGNÓSTICO INICIAL =================
 print("=" * 60)
@@ -70,7 +39,6 @@ print("BANCO EM USO:", DB_PATH)
 print("EXISTE?     :", os.path.exists(DB_PATH))
 
 init_db()
-ensure_super_admin()
 
 if os.path.exists(DB_PATH):
     _c = sqlite3.connect(DB_PATH)
@@ -141,7 +109,7 @@ def load_user(user_id):
 
     if user:
         role = user["role"] if "role" in user.keys() else "usuario"
-        llm_pref = user["llm_preference"] if "llm_preference" in user.keys() else DEFAULT_LLM
+        llm_pref = user["llm_preference"] if "llm_preference" in user.keys() else "ollama"
         return User(user["id"], user["username"], role, llm_pref)
     return None
 
@@ -182,12 +150,6 @@ def sobre():
     return render_template("sobre.html")
 
 
-@app.route("/healthz")
-def healthz():
-    """Health check simples (sem login) para o Render."""
-    return "ok", 200
-
-
 # ================= AUTENTICAÇÃO =================
 
 @app.route("/login", methods=["GET", "POST"])
@@ -209,8 +171,8 @@ def login():
                 return render_template("login.html", erro_cad="Usuário já existe", modo="cadastro")
 
             conn.execute(
-                "INSERT INTO usuarios (username, password, role, llm_preference) VALUES (?, ?, 'usuario', ?)",
-                (username, generate_password_hash(password), DEFAULT_LLM)
+                "INSERT INTO usuarios (username, password, role) VALUES (?, ?, 'usuario')",
+                (username, generate_password_hash(password))
             )
             conn.commit()
             conn.close()
@@ -226,7 +188,7 @@ def login():
 
         if user and check_password_hash(user["password"], password):
             role = user["role"] if "role" in user.keys() else "usuario"
-            llm_pref = user["llm_preference"] if "llm_preference" in user.keys() else DEFAULT_LLM
+            llm_pref = user["llm_preference"] if "llm_preference" in user.keys() else "ollama"
             login_user(User(user["id"], user["username"], role, llm_pref), remember=True)
             return redirect(url_for("home"))
 

@@ -11,9 +11,9 @@ usando **RAG** (busca semântica no índice FAISS) e uma LLM (Ollama local ou Gr
 - O `venv/` já vem pronto nesta pasta com todas as dependências
 - (Opcional) [Ollama](https://ollama.com) rodando em `localhost:11434` para o modo local
 
-Os embeddings usam **fastembed** (ONNX, `BAAI/bge-small-en-v1.5`) — leve e sem GPU.
+Os embeddings usam **sentence-transformers** (`all-MiniLM-L6-v2`) — roda localmente via PyTorch (CPU).
 
-## Como rodar localmente
+## Como rodar
 
 No terminal, dentro **desta** pasta:
 
@@ -38,8 +38,6 @@ Copie `.env.example` para `.env` e preencha:
 | --- | --- |
 | `DOJUFLA_SECRET_KEY` | Chave de sessão do Flask (aleatória) |
 | `GROQ_API_KEY` | Chave da API Groq (nuvem) |
-| `DEFAULT_LLM` | LLM padrão de novos usuários: `ollama` ou `groq` |
-| `SUPERADMIN_USER` / `SUPERADMIN_PASSWORD` | Criam/garantem um super_admin no start |
 | `OLLAMA_URL`, `OLLAMA_MODEL` | Opcionais (padrão local) |
 
 ### No VS Code
@@ -53,7 +51,7 @@ Copie `.env.example` para `.env` e preencha:
 ```
 app.py                 Rotas Flask (chat, histórico, admin)
 database.py            SQLite + migrações
-rag/vectorstore.py     Índice FAISS + embeddings (fastembed/ONNX)
+rag/vectorstore.py     Índice FAISS + embeddings (sentence-transformers)
 rag/llm.py             Integração Ollama / Groq
 templates/             Telas (Jinja2)
 static/style.css       Estilo institucional
@@ -64,7 +62,6 @@ create_admin.py                 Cria um super_admin (via script)
 promover_super_admin.py         Promove usuário a super_admin (via script)
 diagnostico.py                  Inspeção do banco (dev)
 testar_ia.py                    Teste rápido da LLM (dev)
-render.yaml                     Blueprint de deploy no Render
 ```
 
 ## Hierarquia de cargos
@@ -74,8 +71,7 @@ render.yaml                     Blueprint de deploy no Render
 - Cada um gerencia **apenas** quem está estritamente abaixo.
 - `/register` sempre cria `usuario`.
 - **Moderador+**: treinar IA. **Admin+**: gerenciar usuários.
-- **super_admin** só é definido por script (`promover_super_admin.py`) ou pelas
-  variáveis `SUPERADMIN_USER`/`SUPERADMIN_PASSWORD` no start.
+- **super_admin** só é definido por script: `python promover_super_admin.py <usuario>`
 
 ## "Treinar" a IA com PDF
 
@@ -83,24 +79,24 @@ O envio de PDF **reindexa a base** (RAG), não faz fine-tuning:
 o texto é extraído, vetorizado e o índice FAISS é reconstruído.
 A tela **Treinar IA** mostra a contagem de blocos/vetores/PDFs para conferência.
 
-## Deploy no Render
+## Deploy
 
-O repositório inclui `render.yaml`. Para subir:
+### Oracle Cloud (grátis, recomendado)
 
-1. Suba o projeto para o GitHub (veja abaixo).
-2. No Render: **New → Blueprint** → selecione o repositório.
-3. O Render lê o `render.yaml` e pede os valores marcados com `sync: false`:
-   - `GROQ_API_KEY` — sua chave da Groq
-   - `SUPERADMIN_PASSWORD` — senha do admin inicial
-4. Acesse a URL gerada (ex.: `https://dojufla.onrender.com`).
+Passo a passo em **[DEPLOY_ORACLE.md](DEPLOY_ORACLE.md)** — VM *Always Free* (ARM, até 24 GB de RAM),
+com Nginx + systemd. Os arquivos de apoio estão em `deploy/`.
 
-Observações:
+### Docker (qualquer host)
 
-- No plano **free** o serviço hiberna após 15 min de inatividade e o disco é
-  **efêmero** (o SQLite é recriado a cada deploy/restart — o super_admin é
-  recriado automaticamente pelas variáveis acima).
-- Não há Ollama no Render: use `DEFAULT_LLM=groq`.
-- Health check em `/healthz`.
+O `Dockerfile` empacota a aplicação (torch CPU, modelo já baixado, gunicorn na porta 7860):
+
+```powershell
+docker build -t dojufla .
+docker run -p 7860:7860 -e GROQ_API_KEY=... -e DOJUFLA_SECRET_KEY=... dojufla
+```
+
+> ⚠️ O Hugging Face Spaces exige plano **PRO** para Spaces Docker; só os *Static* continuam grátis
+> (e *Static* não roda Flask). O `Dockerfile` continua válido para Cloud Run, Fly.io, VPS, etc.
 
 ## GitHub
 

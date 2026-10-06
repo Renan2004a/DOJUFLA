@@ -1,7 +1,7 @@
 import os
 import faiss
 import numpy as np
-from fastembed import TextEmbedding
+from sentence_transformers import SentenceTransformer
 from pypdf import PdfReader
 
 
@@ -14,17 +14,7 @@ INDEX_PATH = os.path.join(RAG_DIR, "index.faiss")
 DOCS_PATH = os.path.join(RAG_DIR, "docs.npy")
 META_PATH = os.path.join(RAG_DIR, "meta.npy")
 
-# Embeddings leves via ONNX (fastembed) — sem torch.
-EMBED_MODEL = os.environ.get("EMBED_MODEL", "BAAI/bge-small-en-v1.5")
-EMBED_CACHE = os.environ.get(
-    "FASTEMBED_CACHE_PATH", os.path.join(RAG_DIR, "fastembed_cache")
-)
-# 1 thread ajuda a manter a memória baixa em servidores pequenos (ex.: Render free).
-EMBED_THREADS = int(os.environ.get("EMBED_THREADS", "1"))
-
-model = TextEmbedding(
-    model_name=EMBED_MODEL, cache_dir=EMBED_CACHE, threads=EMBED_THREADS
-)
+model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
 def dividir_em_blocos(texto, tamanho=800, sobreposicao=150):
@@ -96,7 +86,7 @@ def rebuild_vectorstore():
 
     print(f"Total de blocos carregados: {len(docs)}")
 
-    embeddings = np.array(list(model.passage_embed(docs)), dtype="float32")
+    embeddings = model.encode(docs, convert_to_numpy=True, show_progress_bar=True)
     dimension = embeddings.shape[1]
 
     index = faiss.IndexFlatL2(dimension)
@@ -133,7 +123,7 @@ def create_vectorstore():
 
 
 def retrieve(query, index, docs, top_k=4):
-    query_embedding = np.array(list(model.query_embed([query])), dtype="float32")
+    query_embedding = model.encode([query], convert_to_numpy=True)
     distances, indices = index.search(query_embedding, top_k)
     resultados = []
     for i in indices[0]:
