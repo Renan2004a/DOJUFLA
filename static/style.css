@@ -1194,6 +1194,23 @@ textarea:hover {
     gap: 8px;
 }
 
+.web-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--texto-suave);
+    cursor: pointer;
+    user-select: none;
+}
+
+.web-toggle input {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--verde-primario);
+}
+
 .btn-ghost {
     padding: 7px 12px;
     background: #fff;
@@ -1235,6 +1252,18 @@ textarea:hover {
     border: 1px solid #cfe6d8;
     border-radius: 999px;
     padding: 2px 9px;
+}
+
+.msg-source-web {
+    text-decoration: none;
+}
+
+.msg-source-web::before {
+    content: "🔗 ";
+}
+
+.msg-source-web:hover {
+    text-decoration: underline;
 }
 
 /* ============================================================

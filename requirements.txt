@@ -20,6 +20,9 @@ pypdf==4.2.0
 docx2txt==0.8
 sentence-transformers==3.1.1
 
+# --- Busca na web (opcional, sem chave) ---
+ddgs==9.16.0
+
 # --- Orquestração do RAG (LangChain) ---
 langchain-core==0.2.43
 langchain-community==0.2.16

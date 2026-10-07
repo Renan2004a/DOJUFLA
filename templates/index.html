@@ -39,6 +39,10 @@
             </div>
 
             <div class="chat-toolbar-actions">
+                <label class="web-toggle" title="Incluir resultados da internet na resposta">
+                    <input type="checkbox" id="webToggle" {% if config.WEB_SEARCH_ENABLED %}checked{% endif %}>
+                    Buscar na web
+                </label>
                 <button type="button" class="btn-ghost" id="btnExportar" onclick="exportarConversa()"
                         disabled title="Exportar conversa em Markdown">Exportar</button>
                 <button type="button" class="btn-sidebar-toggle" id="sidebarToggle"
@@ -280,7 +284,11 @@ async function enviarPergunta() {
         const response = await api('/ask', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question: pergunta, conversa_id: conversaAtivaId })
+            body: JSON.stringify({
+                question: pergunta,
+                conversa_id: conversaAtivaId,
+                web: document.getElementById('webToggle')?.checked ?? false
+            })
         });
 
         if (!response.ok) {
@@ -357,10 +365,21 @@ function renderFontes(wrapper, fontes) {
     titulo.textContent = 'Fontes:';
     box.appendChild(titulo);
     fontes.forEach(f => {
-        const tag = document.createElement('span');
-        tag.className = 'msg-source';
-        tag.textContent = f.pagina ? `${f.arquivo} (p. ${f.pagina})` : f.arquivo;
-        box.appendChild(tag);
+        if (f.tipo === 'web' && f.url) {
+            const link = document.createElement('a');
+            link.className = 'msg-source msg-source-web';
+            link.href = f.url;
+            link.target = '_blank';
+            link.rel = 'noopener';
+            link.textContent = f.titulo || f.url;
+            link.title = f.url;
+            box.appendChild(link);
+        } else {
+            const tag = document.createElement('span');
+            tag.className = 'msg-source';
+            tag.textContent = f.pagina ? `${f.arquivo} (p. ${f.pagina})` : f.arquivo;
+            box.appendChild(tag);
+        }
     });
     wrapper.appendChild(box);
 }

@@ -96,7 +96,7 @@ def test_fontes_salvas_e_exportadas(client, make_user, login, query, monkeypatch
     conversa_id = int(resposta.headers["X-Conversa-ID"])
 
     fontes = json.loads(resposta.headers["X-Sources"])
-    assert fontes == [{"arquivo": "judo.pdf", "pagina": 3}]
+    assert fontes == [{"tipo": "local", "arquivo": "judo.pdf", "pagina": 3}]
 
     # Consome o streaming (é o que dispara o salvamento no histórico).
     assert resposta.get_data(as_text=True) == "Resposta de teste."
@@ -104,6 +104,27 @@ def test_fontes_salvas_e_exportadas(client, make_user, login, query, monkeypatch
     exportado = client.get(f"/conversa/{conversa_id}/exportar").get_data(as_text=True)
     assert "# " in exportado
     assert "judo.pdf (p. 3)" in exportado
+
+
+def test_inclui_fontes_da_web(client, make_user, login, monkeypatch):
+    monkeypatch.setattr("blueprints.chat.get_vectorstore", _sem_vectorstore)
+    monkeypatch.setattr("blueprints.chat.gerar_resposta", _fake_llm)
+    monkeypatch.setattr("blueprints.chat.websearch.search", lambda q, k=None: [
+        {"titulo": "Wikipédia — Judô",
+         "url": "https://pt.wikipedia.org/wiki/Judo",
+         "trecho": "O judô foi criado por Jigoro Kano."},
+    ])
+
+    login(make_user("ana"))
+    resposta = client.post(
+        "/ask", json={"question": "o que é judô?", "conversa_id": None, "web": True}
+    )
+    fontes = json.loads(resposta.headers["X-Sources"])
+    assert {
+        "tipo": "web",
+        "titulo": "Wikipédia — Judô",
+        "url": "https://pt.wikipedia.org/wiki/Judo",
+    } in fontes
 
 
 def test_conversas_isoladas_por_usuario(client, make_user, login):

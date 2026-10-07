@@ -106,6 +106,14 @@ Envie arquivos **PDF, TXT, MD ou DOCX** (vários de uma vez). O texto é extraí
 dividido em blocos e indexado. A reindexação roda **em segundo plano**, com
 progresso na própria tela. As respostas mostram as **fontes** (arquivo e página).
 
+## Busca na web (opcional)
+
+Na tela de consulta há a opção **"Buscar na web"**: quando ligada, o assistente
+combina a **base interna** com resultados da **internet** (DuckDuckGo, sem chave de API)
+e mostra as **fontes** — arquivos internos (com página) e **links** da web.
+
+Configure com `WEB_SEARCH_ENABLED` (liga/desliga) e `WEB_SEARCH_K` (nº de resultados) no `.env`.
+
 ## Conta
 
 Cada usuário pode trocar a própria senha em **Conta** (no menu).

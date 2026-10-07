@@ -16,6 +16,7 @@ from config import Config
 from database import db
 from rag.llm import available_providers, gerar_resposta
 from rag.vectorstore import get_vectorstore, retrieve_with_sources
+from rag import websearch
 
 chat_bp = Blueprint("chat", __name__)
 logger = logging.getLogger(__name__)
@@ -185,8 +186,15 @@ def ask():
     historico = _carregar_historico(conversa_id)
 
     trechos = retrieve_with_sources(pergunta, get_vectorstore())
-    contexto = "\n\n".join(item["texto"] for item in trechos)
-    fontes = _fontes_unicas(trechos)
+    usar_web = bool(data.get("web", Config.WEB_SEARCH_ENABLED))
+    trechos_web = websearch.search(pergunta) if usar_web else []
+
+    partes = [item["texto"] for item in trechos]
+    for item in trechos_web:
+        partes.append(f"[Fonte web: {item['titulo']} — {item['url']}]\n{item['trecho']}")
+    contexto = "\n\n".join(partes)
+
+    fontes = _fontes_local(trechos) + _fontes_web(trechos_web)
     fontes_json = json.dumps(fontes, ensure_ascii=False)
     llm = current_user.llm_preference
 
@@ -277,15 +285,26 @@ def _salvar_mensagem(user_id: int, conversa_id: int, pergunta: str, resposta: st
         logger.exception("Falha ao salvar a mensagem no histórico")
 
 
-def _fontes_unicas(trechos: list) -> list:
+def _fontes_local(trechos: list) -> list:
     vistos = set()
     fontes = []
     for item in trechos:
         chave = (item["arquivo"], item["pagina"])
         if chave not in vistos:
             vistos.add(chave)
-            fontes.append({"arquivo": item["arquivo"], "pagina": item["pagina"]})
+            fontes.append({
+                "tipo": "local",
+                "arquivo": item["arquivo"],
+                "pagina": item["pagina"],
+            })
     return fontes
+
+
+def _fontes_web(resultados: list) -> list:
+    return [
+        {"tipo": "web", "titulo": item["titulo"], "url": item["url"]}
+        for item in resultados
+    ]
 
 
 def _parse_fontes(raw) -> list:
@@ -298,6 +317,8 @@ def _parse_fontes(raw) -> list:
 
 
 def _rotulo_fonte(fonte: dict) -> str:
+    if fonte.get("tipo") == "web":
+        return fonte.get("url") or fonte.get("titulo") or "web"
     arquivo = fonte.get("arquivo", "?")
     pagina = fonte.get("pagina")
     return f"{arquivo} (p. {pagina})" if pagina else arquivo

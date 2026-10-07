@@ -38,6 +38,10 @@ class Config:
     RETRIEVE_K = int(os.environ.get("RETRIEVE_K", "4"))
     HISTORY_LIMIT = int(os.environ.get("HISTORY_LIMIT", "6"))
 
+    # Busca na web (complementa a base interna; sem chave de API)
+    WEB_SEARCH_ENABLED = os.environ.get("WEB_SEARCH_ENABLED", "1") == "1"
+    WEB_SEARCH_K = int(os.environ.get("WEB_SEARCH_K", "4"))
+
     # Extensões aceitas no treinamento da IA.
     ALLOWED_EXTENSIONS = (".pdf", ".txt", ".md", ".docx")
 

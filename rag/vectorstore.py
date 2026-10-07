@@ -215,6 +215,7 @@ def retrieve_with_sources(query: str, vectorstore=None, k: int = None) -> list:
         source = metadata.get("source") or ""
         page = metadata.get("page")
         results.append({
+            "tipo": "local",
             "texto": doc.page_content,
             "arquivo": os.path.basename(source) if source else "base de conhecimento",
             "pagina": (page + 1) if isinstance(page, int) else None,

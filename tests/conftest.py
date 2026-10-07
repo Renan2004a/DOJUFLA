@@ -17,6 +17,7 @@ class _BaseConfig(Config):
     TESTING = True
     SECRET_KEY = "test-secret"
     WTF_CSRF_ENABLED = False
+    WEB_SEARCH_ENABLED = False
     GROQ_API_KEY = "test-key"
     GEMINI_API_KEY = ""
     DEFAULT_LLM = "ollama"
