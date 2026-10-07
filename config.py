@@ -46,7 +46,7 @@ class Config:
     OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3")
 
     GROQ_URL = os.environ.get("GROQ_URL", "https://api.groq.com/openai/v1/chat/completions")
-    GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+    GROQ_MODEL = os.environ.get("GROQ_MODEL", "qwen/qwen3.8-27b")
     GROQ_REASONING_EFFORT = os.environ.get("GROQ_REASONING_EFFORT", "low")
     GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
