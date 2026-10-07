@@ -162,25 +162,33 @@ rebuild_vectorstore = build_index
 
 
 def load_vectorstore() -> FAISS:
-    """Carrega o índice salvo; reconstrói se estiver ausente/desatualizado."""
+    """Carrega o índice salvo.
+
+    Importante: NÃO reconstrói automaticamente durante uma consulta — uma
+    reindexação leva minutos e travaria o pedido. A atualização é feita pela
+    tela "Treinar IA" (em segundo plano, sem bloquear).
+    """
     global _vectorstore
     if _vectorstore is not None:
         return _vectorstore
 
-    up_to_date = (
-        os.path.exists(Config.INDEX_FILE)
-        and _saved_meta().get("fingerprint") == _fingerprint()
-    )
-    if up_to_date:
-        logger.info("Carregando índice FAISS salvo...")
-        _vectorstore = FAISS.load_local(
-            Config.RAG_DIR,
-            get_embeddings(),
-            allow_dangerous_deserialization=True,
+    if not os.path.exists(Config.INDEX_FILE):
+        raise FileNotFoundError(
+            "Índice vetorial não encontrado. Use 'Treinar IA' para criá-lo."
         )
-    else:
-        logger.info("Índice ausente/desatualizado. Reconstruindo...")
-        build_index()
+
+    if _saved_meta().get("fingerprint") != _fingerprint():
+        logger.warning(
+            "Os documentos mudaram desde a última indexação. Usando o índice atual; "
+            "use 'Treinar IA' para reindexar."
+        )
+
+    logger.info("Carregando índice FAISS salvo...")
+    _vectorstore = FAISS.load_local(
+        Config.RAG_DIR,
+        get_embeddings(),
+        allow_dangerous_deserialization=True,
+    )
     return _vectorstore
 
 
