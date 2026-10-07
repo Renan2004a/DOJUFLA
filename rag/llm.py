@@ -101,16 +101,24 @@ def _groq_stream(prompt: str) -> Generator[str, None, None]:
         yield "\n[ERRO GROQ]: variável de ambiente GROQ_API_KEY não configurada."
         return
     try:
+        model = _setting("GROQ_MODEL")
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.2,
+            "max_tokens": 2048,
+            "stream": True,
+        }
+        # Modelos gpt-oss "pensam" antes de responder; reduzir o esforço
+        # deixa a resposta mais rápida e preserva o orçamento de tokens.
+        effort = _setting("GROQ_REASONING_EFFORT")
+        if effort and "gpt-oss" in model:
+            payload["reasoning_effort"] = effort
+
         response = requests.post(
             _setting("GROQ_URL"),
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "model": _setting("GROQ_MODEL"),
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.2,
-                "max_tokens": 2048,
-                "stream": True,
-            },
+            json=payload,
             stream=True,
             timeout=_setting("LLM_TIMEOUT"),
         )
