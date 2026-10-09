@@ -5,6 +5,7 @@ import logging
 from flask import (
     Blueprint,
     Response,
+    current_app,
     jsonify,
     render_template,
     request,
@@ -186,7 +187,8 @@ def ask():
     historico = _carregar_historico(conversa_id)
 
     trechos = retrieve_with_sources(pergunta, get_vectorstore())
-    usar_web = bool(data.get("web", Config.WEB_SEARCH_ENABLED))
+    default_web = current_app.config.get("WEB_SEARCH_ENABLED", Config.WEB_SEARCH_ENABLED)
+    usar_web = bool(data.get("web", default_web))
     trechos_web = websearch.search(pergunta) if usar_web else []
 
     partes = [item["texto"] for item in trechos]
