@@ -13,6 +13,9 @@ Werkzeug==3.0.4
 # --- Configuração (.env) ---
 python-dotenv==1.0.1
 
+# --- Servidor de produção (Linux/Railway) ---
+gunicorn==22.0.0
+
 # --- RAG: busca vetorial, embeddings e leitura de PDF ---
 faiss-cpu==1.8.0
 numpy==1.26.4
