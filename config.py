@@ -19,7 +19,8 @@ except Exception:  # pragma: no cover - dotenv é opcional
 class Config:
     # ----- Caminhos -----
     BASE_DIR = BASE_DIR
-    DATABASE = os.path.join(BASE_DIR, "database.db")
+    # Permite apontar o banco para um disco persistente (ex.: volume do Railway).
+    DATABASE = os.environ.get("DOJUFLA_DB") or os.path.join(BASE_DIR, "database.db")
     DOCS_DIR = os.path.join(BASE_DIR, "documentos")
     DATA_FILE = os.path.join(BASE_DIR, "data", "base_conhecimento.txt")
     RAG_DIR = os.path.join(BASE_DIR, "rag")
