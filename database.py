@@ -1,4 +1,5 @@
 """Camada de acesso ao banco de dados (SQLite) e migrações."""
+import os
 import sqlite3
 from contextlib import contextmanager
 
@@ -64,7 +65,9 @@ def db_path() -> str:
 
 def get_db() -> sqlite3.Connection:
     """Abre uma conexão SQLite configurada (Row factory + foreign keys)."""
-    conn = sqlite3.connect(db_path())
+    caminho = db_path()
+    os.makedirs(os.path.dirname(caminho) or ".", exist_ok=True)
+    conn = sqlite3.connect(caminho)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
