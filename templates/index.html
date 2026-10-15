@@ -35,6 +35,8 @@
                         <option value="ollama" selected>Ollama (Llama 3 · local)</option>
                     {% endfor %}
                 </select>
+                <button type="button" class="btn-ghost" id="btnOllamaConfig"
+                        onclick="alternarOllamaConfig()" hidden>Configurar Ollama</button>
                 <span id="llmStatus" class="llm-status" role="status" aria-live="polite"></span>
             </div>
 
@@ -50,6 +52,34 @@
                     Histórico
                 </button>
             </div>
+        </div>
+
+        <div id="ollamaConfig" class="ollama-config" hidden>
+            <div class="ollama-config-head">
+                <strong>Ollama (modelo local)</strong>
+                <button type="button" class="ollama-close" aria-label="Fechar"
+                        onclick="fecharOllamaConfig()">&times;</button>
+            </div>
+            <div class="ollama-config-row">
+                <label for="ollamaUrl">Endereço</label>
+                <input id="ollamaUrl" type="text" placeholder="http://localhost:11434"
+                       value="{{ current_user.ollama_url or '' }}" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="ollama-config-row">
+                <label for="ollamaModel">Modelo</label>
+                <input id="ollamaModel" type="text" placeholder="llama3"
+                       value="{{ current_user.ollama_model or '' }}" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="ollama-config-actions">
+                <button type="button" class="btn-ghost" onclick="testarOllama()">Testar conexão</button>
+                <button type="button" class="btn-primary" onclick="salvarOllama()">Salvar</button>
+                <span id="ollamaStatus" class="ollama-status" role="status" aria-live="polite"></span>
+            </div>
+            <p class="ollama-hint">
+                Rode o Ollama na sua máquina (<code>ollama serve</code>) e informe o endereço.
+                Ex.: <code>http://localhost:11434</code>. Se o app estiver na nuvem, ele não
+                alcança o <code>localhost</code> do seu PC — use um túnel ou rode o app localmente.
+            </p>
         </div>
 
         <div class="chat-box" id="chatBox" role="log" aria-live="off" aria-label="Mensagens da conversa" tabindex="0">
@@ -79,6 +109,7 @@ let enviando = false;
 
 document.addEventListener("DOMContentLoaded", () => {
     carregarConversas();
+    atualizarVisibilidadeOllama();
 });
 
 /* ---------- Histórico ---------- */
@@ -392,6 +423,7 @@ function lerFontes(header) {
 function alterarLLM() {
     const llm = document.getElementById('llmSelect').value;
     const status = document.getElementById('llmStatus');
+    atualizarVisibilidadeOllama();
     status.textContent = 'Salvando…';
     api('/set_llm', {
         method: 'POST',
@@ -402,6 +434,70 @@ function alterarLLM() {
     .then(({ ok }) => { status.textContent = ok ? 'Modelo salvo.' : 'Não foi possível salvar.'; })
     .catch(() => { status.textContent = 'Não foi possível salvar.'; })
     .finally(() => setTimeout(() => status.textContent = '', 2500));
+}
+
+/* ---------- Ollama local ---------- */
+
+function atualizarVisibilidadeOllama() {
+    const ehOllama = document.getElementById('llmSelect').value === 'ollama';
+    document.getElementById('btnOllamaConfig').hidden = !ehOllama;
+    if (!ehOllama) document.getElementById('ollamaConfig').hidden = true;
+}
+
+function alternarOllamaConfig() {
+    const painel = document.getElementById('ollamaConfig');
+    painel.hidden = !painel.hidden;
+    if (!painel.hidden) {
+        document.getElementById('ollamaUrl').focus();
+        testarOllama();
+    }
+}
+
+function fecharOllamaConfig() {
+    document.getElementById('ollamaConfig').hidden = true;
+}
+
+function salvarOllama() {
+    const status = document.getElementById('ollamaStatus');
+    const ollama_url = document.getElementById('ollamaUrl').value.trim();
+    const ollama_model = document.getElementById('ollamaModel').value.trim();
+    status.textContent = 'Salvando…';
+    api('/set_ollama', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ollama_url, ollama_model })
+    })
+    .then(res => res.json().then(data => ({ ok: res.ok, data })))
+    .then(({ ok, data }) => {
+        if (!ok) { status.textContent = 'Não foi possível salvar.'; return; }
+        if (data.ollama_url) document.getElementById('ollamaUrl').value = data.ollama_url;
+        status.textContent = 'Endereço salvo.';
+    })
+    .catch(() => { status.textContent = 'Não foi possível salvar.'; })
+    .finally(() => setTimeout(() => status.textContent = '', 4000));
+}
+
+function testarOllama() {
+    const status = document.getElementById('ollamaStatus');
+    const ollama_url = document.getElementById('ollamaUrl').value.trim();
+    status.textContent = 'Testando…';
+    api('/test_ollama', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ollama_url })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.ok) {
+            const modelos = data.modelos || [];
+            status.textContent = modelos.length
+                ? 'Ollama localizado (' + modelos.length + ' modelo(s)).'
+                : 'Ollama localizado, mas sem modelos instalados.';
+        } else {
+            status.textContent = data.erro || 'Ollama não localizado.';
+        }
+    })
+    .catch(() => { status.textContent = 'Ollama não localizado.'; });
 }
 
 /* ---------- Sidebar responsiva ---------- */

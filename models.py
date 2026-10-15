@@ -16,11 +16,14 @@ ROLE_LEVELS = {
 
 
 class User(UserMixin):
-    def __init__(self, id, username, role="usuario", llm_preference="ollama"):
+    def __init__(self, id, username, role="usuario", llm_preference="ollama",
+                 ollama_url=None, ollama_model=None):
         self.id = id
         self.username = username
         self.role = role if role in ROLE_LEVELS else "usuario"
         self.llm_preference = llm_preference
+        self.ollama_url = ollama_url
+        self.ollama_model = ollama_model
 
     def level(self) -> int:
         return ROLE_LEVELS.get(self.role, 1)
@@ -46,6 +49,8 @@ def user_from_row(row) -> User:
         username=row["username"],
         role=row["role"] if "role" in keys else "usuario",
         llm_preference=row["llm_preference"] if "llm_preference" in keys else "ollama",
+        ollama_url=row["ollama_url"] if "ollama_url" in keys else None,
+        ollama_model=row["ollama_model"] if "ollama_model" in keys else None,
     )
 
 

@@ -463,6 +463,83 @@ main {
     font-weight: 600;
 }
 
+/* ---------- Configuração do Ollama local ---------- */
+.ollama-config {
+    margin-top: 12px;
+    padding: 14px 16px;
+    background: #f6faf7;
+    border: 1px solid var(--borda-forte);
+    border-radius: var(--raio-sm);
+}
+
+.ollama-config-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    color: var(--verde-escuro);
+}
+
+.ollama-close {
+    border: none;
+    background: transparent;
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--texto-suave);
+}
+
+.ollama-config-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.ollama-config-row label {
+    flex: 0 0 90px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--texto-suave);
+}
+
+.ollama-config-row input {
+    flex: 1;
+    padding: 8px 10px;
+    border: 1px solid var(--borda-forte);
+    border-radius: var(--raio-sm);
+    font-size: 0.85rem;
+    font-family: inherit;
+    background: #fff;
+    color: var(--texto);
+}
+
+.ollama-config-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.ollama-status {
+    font-size: 0.8rem;
+    color: var(--verde-escuro);
+    font-weight: 600;
+}
+
+.ollama-hint {
+    margin: 10px 0 0;
+    font-size: 0.78rem;
+    color: var(--texto-suave);
+    line-height: 1.4;
+}
+
+.ollama-hint code {
+    background: #eef2ef;
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+
 .btn-sidebar-toggle {
     display: none;
     padding: 8px 14px;

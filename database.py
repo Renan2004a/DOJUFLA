@@ -15,7 +15,9 @@ CREATE TABLE IF NOT EXISTS usuarios (
     username       TEXT UNIQUE NOT NULL,
     password       TEXT NOT NULL,
     role           TEXT DEFAULT 'usuario',
-    llm_preference TEXT DEFAULT 'ollama'
+    llm_preference TEXT DEFAULT 'ollama',
+    ollama_url     TEXT,
+    ollama_model   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS conversas (
@@ -45,7 +47,9 @@ CREATE INDEX IF NOT EXISTS idx_historico_conversa ON historico (conversa_id, id)
 # Colunas adicionadas ao longo do tempo (bancos antigos).
 _MIGRATIONS = {
     "usuarios": {"role": "TEXT DEFAULT 'usuario'",
-                 "llm_preference": "TEXT DEFAULT 'ollama'"},
+                 "llm_preference": "TEXT DEFAULT 'ollama'",
+                 "ollama_url": "TEXT",
+                 "ollama_model": "TEXT"},
     "conversas": {"updated_at": "TIMESTAMP"},
     "historico": {"conversa_id": "INTEGER", "timestamp": "TIMESTAMP", "fontes": "TEXT"},
 }

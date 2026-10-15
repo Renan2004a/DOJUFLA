@@ -57,13 +57,29 @@ def montar_prompt(contexto: str, pergunta: str, historico: List[str] = None) -> 
 # --------------------------------------------------------------------------- #
 # Provedores
 # --------------------------------------------------------------------------- #
+def _ollama_endpoint():
+    """Endereço e modelo do Ollama: preferência do usuário, senão a config padrão."""
+    url = _setting("OLLAMA_URL")
+    model = _setting("OLLAMA_MODEL")
+    try:
+        from flask_login import current_user
+
+        if getattr(current_user, "is_authenticated", False):
+            url = getattr(current_user, "ollama_url", None) or url
+            model = getattr(current_user, "ollama_model", None) or model
+    except Exception:  # pragma: no cover - chamada fora de contexto de requisição
+        pass
+    return url, model
+
+
 def _ollama_stream(prompt: str) -> Generator[str, None, None]:
     """Streaming via Ollama (modelo local)."""
+    url, model = _ollama_endpoint()
     try:
         response = requests.post(
-            _setting("OLLAMA_URL"),
+            url,
             json={
-                "model": _setting("OLLAMA_MODEL"),
+                "model": model,
                 "prompt": prompt,
                 "stream": True,
                 "options": {"temperature": 0.2, "top_p": 0.9, "num_ctx": 4096},

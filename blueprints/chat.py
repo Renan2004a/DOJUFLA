@@ -2,6 +2,7 @@
 import json
 import logging
 
+import requests
 from flask import (
     Blueprint,
     Response,
@@ -54,6 +55,61 @@ def set_llm():
         )
     current_user.llm_preference = llm
     return jsonify({"ok": True, "llm": llm})
+
+
+# --------------------------------------------------------------------------- #
+# Ollama local (endereço configurável pelo usuário)
+# --------------------------------------------------------------------------- #
+def _normalizar_ollama_url(raw):
+    """Aceita 'host:porta'/'http://host:porta' e devolve a URL completa /api/generate."""
+    url = (raw or "").strip()
+    if not url:
+        return None
+    if not url.startswith(("http://", "https://")):
+        url = "http://" + url
+    url = url.rstrip("/")
+    if not url.endswith("/api/generate"):
+        url = url + "/api/generate"
+    return url
+
+
+@chat_bp.post("/set_ollama")
+@login_required
+def set_ollama():
+    """Salva o endereço/modelo do Ollama escolhidos pelo usuário."""
+    data = request.get_json(silent=True) or {}
+    url = _normalizar_ollama_url(data.get("ollama_url"))
+    model = (data.get("ollama_model") or "").strip() or None
+
+    with db() as conn:
+        conn.execute(
+            "UPDATE usuarios SET ollama_url=?, ollama_model=? WHERE id=?",
+            (url, model, current_user.id),
+        )
+    current_user.ollama_url = url
+    current_user.ollama_model = model
+    return jsonify({"ok": True, "ollama_url": url, "ollama_model": model})
+
+
+@chat_bp.post("/test_ollama")
+@login_required
+def test_ollama():
+    """Verifica se há um Ollama respondendo no endereço informado."""
+    data = request.get_json(silent=True) or {}
+    url = _normalizar_ollama_url(data.get("ollama_url")) or Config.OLLAMA_URL
+    base = url.rsplit("/api/", 1)[0]
+    try:
+        resp = requests.get(f"{base}/api/tags", timeout=8)
+        resp.raise_for_status()
+        modelos = [m.get("name") for m in resp.json().get("models", []) if m.get("name")]
+        return jsonify({"ok": True, "modelos": modelos})
+    except Exception as exc:  # noqa: BLE001 - devolve o motivo ao usuário
+        logger.info("Ollama não localizado em %s: %s", base, exc)
+        return jsonify({
+            "ok": False,
+            "erro": f"Não foi possível localizar o Ollama em {base}. "
+                    "Verifique se ele está em execução nesse endereço.",
+        })
 
 
 # --------------------------------------------------------------------------- #
